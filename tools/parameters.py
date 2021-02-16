@@ -251,5 +251,10 @@ class ParametersHandler :
 				self.family_update_request.extend(args.update_svd)
 				self.family_upgrade_request.extend(args.upgrade_svd)
 
+		for exclude in self.chips_exclude :
+			self.family_upgrade_request = [f for f in self.family_upgrade_request if not fnmatch.fnmatch(f, exclude)]
+			self.family_update_request =  [f for f in self.family_update_request  if not fnmatch.fnmatch(f, exclude)]
+
+
 		
 global_parameters = ParametersHandler()

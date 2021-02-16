@@ -33,7 +33,7 @@ from tools import global_parameters
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
 
-formatter = logging.Formatter("{levelname:8s} {filename:s}:{funcName:s}:{lineno:4<d} - {message}", style="{")
+formatter = logging.Formatter("{levelname:8s} {filename:s}:{lineno:4<d} - {message}", style="{")
 
 # Log to file handler
 log_file_handler = logging.FileHandler("run.log", "w")
