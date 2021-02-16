@@ -198,9 +198,9 @@ class KeilPack:
 						loaded_size += len(buffer_inter)
 						if download_len:
 							percent = (loaded_size / download_len) * 100
-							print(f"Downloading : [{loaded_size/1e6:3.1f}/{download_len / 1e6: 3.1f} Mo] ({percent:3.1f}%) of {url}",end="\r")
+							print(f"\rDownloading : [{loaded_size/1e6:3.1f}/{download_len / 1e6: 3.1f} Mo] ({percent:3.1f}%) of {url}",end="")
 						else :
-							print(f"Downloading : [{loaded_size / 1e6:3.1f} Mo] of {url}",end="\r")
+							print(f"\rDownloading : [{loaded_size / 1e6:3.1f} Mo] of {url}",end="")
 
 					print("\nDone.")
 					logger.info(f"Downloaded {len(buffer_all.getvalue())} bytes")
