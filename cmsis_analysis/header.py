@@ -352,7 +352,7 @@ class CMSISHeader:
 			return
 		if self.periph_table is None :
 			self.periph_table = dict()
-		periph_rexp = re.compile(r"(?:__(?P<io>[IO]{1,2})\s+)?(?P<type>u?int(?P<int_size>\d+)_t|\w+)\s+(?P<name>\w*)(?:\[(?P<arr_size>\d+)\])?\s*;\s*(?:\*(?:!<)?(?P<com>.+)\*)?")
+		reg_rexp = re.compile(r"(?:__(?P<io>[IO]{1,2})\s+)?(?P<type>u?int(?P<int_size>\d+)_t|\w+)\s+(?P<name>\w*)(?:\[(?P<arr_size>\d+)\])?\s*;\s*(?:\*(?:!<)?(?P<com>.+)\*)?")
 		
 		for raw in self.raw_peripheral :
 			new_peripheral = CMSISPeripheral(self)
@@ -360,7 +360,7 @@ class CMSISHeader:
 				if line == str():
 					continue
 
-				result = periph_rexp.search(line)
+				result = reg_rexp.search(line)
 				if result :
 					new_register = CMSISRegister()
 					data = result.groupdict()
