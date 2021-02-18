@@ -48,6 +48,9 @@ class PDSCHandler:
 											 "header" : f"cmsis/{self.family}",
 											 "pdsc" : "fileset"}
 
+		"""Map of filename -> handler for all CMSIS header used by chips defined in the PDSC"""
+		self._cmsis_handlers : T.Dict[str,CMSISHeader] = dict()
+
 	@staticmethod
 	def cache_and_remove_ns(filepath):
 		"""
@@ -67,13 +70,23 @@ class PDSCHandler:
 
 	@property
 	def svd_names(self) -> T.List[str]:
+		"""
+		Returns the file name of all SVD associated with the current PDSC
+		"""
 		return sorted([os.path.basename(x.svd) for x in self.associations])
 
 	@property
 	def svd_to_define(self) -> T.Dict[str,str]:
-		return dict([(os.path.basename(x.svd),x.computed_define) for x in self.associations])
+		"""
+		Provide a dictionary giving a SVD name to define mapping
+		"""
+		return {os.path.basename(x.svd):x.computed_define for x in self.associations}
 
 	def process(self):
+		"""
+		Process the targeted PDSC file.
+		Build the Chip set, associating define, svd and header.
+		"""
 		proc_list : T.List[ET.Element] = self.root.findall("devices/family/processor")
 		family : ET.Element
 		proc_ok = len(proc_list) > 0
@@ -105,8 +118,11 @@ class PDSCHandler:
 								self.associations.add(copy(current_assoc))
 
 	def rebuild_extracted_associations(self,root_destination : str):
+		"""
+		Reconstruct paths to all associated files (Headers and SVD) targeting locally saved copy.
+		:param root_destination: Root location where new files are located (by default .data/)
+		"""
 		destination_paths = self.dest_paths
-		base_path = os.path.dirname(self.path) + "/"
 		for key in destination_paths:
 			destination_paths[key] = f"{root_destination}/{destination_paths[key]}"
 
@@ -114,22 +130,37 @@ class PDSCHandler:
 			assoc.header = f'{destination_paths["header"]}/{os.path.basename(assoc.header)}'
 			assoc.svd = f'{destination_paths["svd"]}/{os.path.basename(assoc.svd)}'
 
-	def extract_to(self,root_destination :  str) -> "PDSCHandler":
-
+	def init_filetree(self, root_path):
+		"""
+		Ensure the required filetree exists and clear the header folder before generation
+		:param root_path: Root path to generate the filetree in
+		:return: A dictionary providing a filetype -> path association.
+		"""
 		destination_paths = self.dest_paths
-		shutil.rmtree(destination_paths["header"],True)
-		base_path = os.path.dirname(self.path) + "/"
-		for key in destination_paths :
-			destination_paths[key] = f"{root_destination}/{destination_paths[key]}"
-			if not os.path.exists(destination_paths[key]) :
+		shutil.rmtree(destination_paths["header"], True)
+		for key in destination_paths:
+			destination_paths[key] = f"{root_path}/{destination_paths[key]}"
+			if not os.path.exists(destination_paths[key]):
 				os.makedirs(destination_paths[key])
+		return destination_paths
+
+	def extract_to(self,root_destination :  str) -> "PDSCHandler":
+		"""
+		Given a decompressed Keil pack, retrieve all interesting files and copy them to a given directory.
+
+		This function will create if required all the directory structure under root_destination.
+
+		:param root_destination: The target directory which will receive all retrieved files.
+		:return: A new PDSC handler, targeting the PDSC file after being moved.
+		"""
+		destination_paths = self.init_filetree(root_destination)
 
 		ret = PDSCHandler(destination_paths["pdsc"] + "/" + os.path.basename(self.path), analyze=False)
 
 		shutil.copy(self.path,destination_paths["pdsc"])
 
 		header_src_done : T.Set[str] = set()
-
+		base_path = os.path.dirname(self.path) + "/"
 		for assoc in self.associations :
 			if not assoc.is_full :
 				logger.warning(f"Ignored not full association for define {assoc.computed_define}")
@@ -139,6 +170,7 @@ class PDSCHandler:
 										define=assoc.define,
 									  	processor=assoc.processor,
 									  pdefine=assoc.processor_define))
+
 			shutil.copy(base_path + assoc.svd,destination_paths["svd"])
 
 			header_src =  base_path + assoc.header
@@ -151,30 +183,17 @@ class PDSCHandler:
 		ret.rebuild_extracted_associations(root_destination)
 		return ret
 
+
+
 	def compute_cmsis_handlers(self):
-		cmsis_handlers : T.Dict[str,CMSISHeader] = dict()
+		"""
+		Ensures that all CMSIS headers handlers are initialized and processed.
+		:return:
+		"""
+		self._cmsis_handlers.clear()
 
 		for assoc in self.associations :
-			if assoc.header not in cmsis_handlers :
-				cmsis_handlers[assoc.header] = CMSISHeader(assoc.header)
-				new_handler = cmsis_handlers[assoc.header]
-				new_handler.read()
-				new_handler.process_include_table()
-				if not new_handler.is_include_map :
-					new_handler.process_structural()
-				new_handler.clean()
-
-			curr_handler = cmsis_handlers[assoc.header]
-			if curr_handler.is_include_map :
-				if curr_handler.include_table[assoc.define] not in cmsis_handlers :
-					cmsis_handlers[curr_handler.include_table[assoc.define]] = CMSISHeader(curr_handler.include_table[assoc.define])
-					curr_handler = cmsis_handlers[curr_handler.include_table[assoc.define]]
-					curr_handler.read()
-					curr_handler.process_structural()
-					curr_handler.apply_corrector(cmsis_root_corrector)
-					curr_handler.clean()
-				else :
-					curr_handler = cmsis_handlers[curr_handler.include_table[assoc.define]]
+			curr_handler = self.provide_cmsis_handler(assoc)
 			#Now the right handler is selected.
 			assoc.header = curr_handler.path
 			assoc.header_handler = curr_handler
@@ -182,12 +201,62 @@ class PDSCHandler:
 			if not assoc.header_handler.is_structural :
 				raise AssertionError(f"Chip header handler should be structural ! ({assoc.computed_define}")
 
+	def provide_cmsis_handler(self, chip : Chip) -> CMSISHeader:
+		"""
+		This function will return a valid CMSISHeader handler for a given chip
+		:param chip: Chip for which we need a handler
+		:return: Handler
+		"""
+		if chip.header not in self._cmsis_handlers:
+			self._create_cmsis_handler(chip)
+		handler = self._cmsis_handlers[chip.header]
+		if handler.is_include_map:
+			handler = self.provide_structural_from_include_map(chip, handler)
+		return handler
+
+	def _create_cmsis_handler(self, assoc : Chip):
+		"""
+		This function create the CMSIS header handler for the header file provided by assoc.
+		:param assoc: Chip for which we need to create the handler
+		:return: None
+		"""
+		self._cmsis_handlers[assoc.header] = CMSISHeader(assoc.header)
+		new_handler = self._cmsis_handlers[assoc.header]
+		new_handler.read()
+		new_handler.process_include_table()
+		if not new_handler.is_include_map:
+			new_handler.process_structural()
+		new_handler.clean()
+
+	def provide_structural_from_include_map(self, chip : Chip, cmsis_handler : CMSISHeader) -> CMSISHeader:
+		"""
+		Given a chip and a CMSIS handler containing an include map (typically stm32f0xx.h), this function provide the
+		CMSIS handler targeting the structural CMSIS header matching the chip define.
+
+		:param chip: Chip which define should be looked up
+		:param cmsis_handler: Include map handler
+		:return: Structural handler
+		"""
+		if cmsis_handler.include_table[chip.define] not in self._cmsis_handlers:
+			self._cmsis_handlers[cmsis_handler.include_table[chip.define]] = CMSISHeader(
+				cmsis_handler.include_table[chip.define])
+			cmsis_handler = self._cmsis_handlers[cmsis_handler.include_table[chip.define]]
+			cmsis_handler.read()
+			cmsis_handler.process_structural()
+			cmsis_handler.apply_corrector(cmsis_root_corrector)
+			cmsis_handler.clean()
+		else:
+			cmsis_handler = self._cmsis_handlers[cmsis_handler.include_table[chip.define]]
+		return cmsis_handler
+
 	def check_svd_define_association(self):
 		define_to_svd : T.Dict[str,T.List[str]]= dict()
 		svd_list : T.Dict[str,str] = dict()
 		defines_to_fix : T.List[str] = list()
+
 		logger.info(f"Checking define to SVD association for {self.file_name}...")
 		for c in self.associations :
+			# Build a formated SVD name, without extension
 			formated_svd_name = os.path.basename(c.svd)
 			formated_svd_name = formated_svd_name[:formated_svd_name.find(".svd")]
 			if "_" in formated_svd_name :
@@ -195,21 +264,25 @@ class PDSCHandler:
 
 			formated_svd_name = formated_svd_name.replace("x","*") + "*"
 
+			# Integrity check on formated SVD names, avoiding ambiguous references.
 			if formated_svd_name in svd_list and svd_list[formated_svd_name] != c.svd :
 				logger.error(f"\tVarious SVD match same formated template : {svd_list[formated_svd_name]} and {c.svd}")
 			svd_list[formated_svd_name] = c.svd
 
+
 			if c.define not in define_to_svd :
+				# New association
 				define_to_svd[c.define] = [formated_svd_name]
 			elif define_to_svd[c.define] == formated_svd_name :
+				# No issue
 				pass
-			else :
-				if formated_svd_name not in define_to_svd[c.define] :
-					define_to_svd[c.define].append(formated_svd_name)
-					defines_to_fix.append(c.define)
-					logger.error(f"\tDefine to SVD integrity failure : {c.define} mapped to {[svd_list[x] for x in define_to_svd[c.define]]} and {c.svd}")
+			elif formated_svd_name not in define_to_svd[c.define] :
+				# The SVD name match a define already matched to another SVD
+				define_to_svd[c.define].append(formated_svd_name)
+				defines_to_fix.append(c.define)
+				logger.error(f"\tDefine to SVD integrity failure : {c.define} mapped to {[svd_list[x] for x in define_to_svd[c.define]]} and {c.svd}")
 
-
+		# Try to fix associations based on most specific pattern matching.
 		for broken_def in defines_to_fix :
 			for broken_chip in [x for x in self.associations if x.define == broken_def]:
 				fixed = False
