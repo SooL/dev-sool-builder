@@ -38,7 +38,7 @@ class PDSCHandler:
 
 		self.root : ET.Element = self.cache_and_remove_ns(self.path) if analyze else None
 
-		self.associations : T.Set[Chip] = set()
+		self.chips : T.Set[Chip] = set()
 
 		self.file_name : str = os.path.basename(self.path)
 		self.version_string : str = ""
@@ -73,14 +73,14 @@ class PDSCHandler:
 		"""
 		Returns the file name of all SVD associated with the current PDSC
 		"""
-		return sorted([os.path.basename(x.svd) for x in self.associations])
+		return sorted([os.path.basename(x.svd) for x in self.chips])
 
 	@property
 	def svd_to_define(self) -> T.Dict[str,str]:
 		"""
 		Provide a dictionary giving a SVD name to define mapping
 		"""
-		return {os.path.basename(x.svd):x.computed_define for x in self.associations}
+		return {os.path.basename(x.svd):x.computed_define for x in self.chips}
 
 	def process(self):
 		"""
@@ -115,7 +115,7 @@ class PDSCHandler:
 							# if not "STM32F1" in current_assoc.define and not fnmatch(device.attrib["Dname"],current_assoc.define.replace("x","?") + "*") :
 							# 	logger.warning(f"\tChip/Define mismatch {device.attrib['Dname']} got {current_assoc.define}")
 							if global_parameters.is_chip_valid(current_assoc.name) :
-								self.associations.add(copy(current_assoc))
+								self.chips.add(copy(current_assoc))
 
 	def rebuild_extracted_associations(self,root_destination : str):
 		"""
@@ -126,9 +126,9 @@ class PDSCHandler:
 		for key in destination_paths:
 			destination_paths[key] = f"{root_destination}/{destination_paths[key]}"
 
-		for assoc in self.associations :
-			assoc.header = f'{destination_paths["header"]}/{os.path.basename(assoc.header)}'
-			assoc.svd = f'{destination_paths["svd"]}/{os.path.basename(assoc.svd)}'
+		for chip in self.chips :
+			chip.header = f'{destination_paths["header"]}/{os.path.basename(chip.header)}'
+			chip.svd = f'{destination_paths["svd"]}/{os.path.basename(chip.svd)}'
 
 	def init_filetree(self, root_path):
 		"""
@@ -161,22 +161,22 @@ class PDSCHandler:
 
 		header_src_done : T.Set[str] = set()
 		base_path = os.path.dirname(self.path) + "/"
-		for assoc in self.associations :
-			if not assoc.is_full :
-				logger.warning(f"Ignored not full association for define {assoc.computed_define}")
+		for chip in self.chips :
+			if not chip.is_full :
+				logger.warning(f"Ignored not full association for define {chip.computed_define}")
 				continue
-			ret.associations.add(Chip(svd=assoc.svd,
-										header=assoc.header,
-										define=assoc.define,
-									  	processor=assoc.processor,
-									  pdefine=assoc.processor_define))
+			ret.chips.add(Chip(svd=chip.svd,
+							   header=chip.header,
+							   define=chip.define,
+							   processor=chip.processor,
+							   pdefine=chip.processor_define))
 
-			shutil.copy(base_path + assoc.svd,destination_paths["svd"])
+			shutil.copy(base_path + chip.svd,destination_paths["svd"])
 
-			header_src =  base_path + assoc.header
+			header_src =  base_path + chip.header
 			if header_src not in header_src_done :
 				header_src_done.add(header_src)
-				for file in glob.glob(f"{os.path.dirname(base_path + assoc.header)}/*.h"):
+				for file in glob.glob(f"{os.path.dirname(base_path + chip.header)}/*.h"):
 					logger.info(f"\tBatch retrieving header file {self.family}/{os.path.basename(file)}")
 					shutil.copy(file, destination_paths["header"])
 		logger.info(f"Files from {os.path.basename(self.path)} extracted to {root_destination}.")
@@ -192,14 +192,14 @@ class PDSCHandler:
 		"""
 		self._cmsis_handlers.clear()
 
-		for assoc in self.associations :
-			curr_handler = self.provide_cmsis_handler(assoc)
+		for chip in self.chips :
+			curr_handler = self.provide_cmsis_handler(chip)
 			#Now the right handler is selected.
-			assoc.header = curr_handler.path
-			assoc.header_handler = curr_handler
-			assoc.cmsis_options = curr_handler.cmsis_conf
-			if not assoc.header_handler.is_structural :
-				raise AssertionError(f"Chip header handler should be structural ! ({assoc.computed_define}")
+			chip.header = curr_handler.path
+			chip.header_handler = curr_handler
+			chip.cmsis_options = curr_handler.cmsis_conf
+			if not chip.header_handler.is_structural :
+				raise AssertionError(f"Chip header handler should be structural ! ({chip.computed_define}")
 
 	def provide_cmsis_handler(self, chip : Chip) -> CMSISHeader:
 		"""
@@ -255,7 +255,7 @@ class PDSCHandler:
 		defines_to_fix : T.List[str] = list()
 
 		logger.info(f"Checking define to SVD association for {self.file_name}...")
-		for c in self.associations :
+		for c in self.chips :
 			# Build a formated SVD name, without extension
 			formated_svd_name = os.path.basename(c.svd)
 			formated_svd_name = formated_svd_name[:formated_svd_name.find(".svd")]
@@ -284,7 +284,7 @@ class PDSCHandler:
 
 		# Try to fix associations based on most specific pattern matching.
 		for broken_def in defines_to_fix :
-			for broken_chip in [x for x in self.associations if x.define == broken_def]:
+			for broken_chip in [x for x in self.chips if x.define == broken_def]:
 				fixed = False
 				for potential_svd_pattern in sorted(define_to_svd[broken_def],key=lambda x: x.count("*")) :
 					if not fixed and fnmatch(broken_chip.define,potential_svd_pattern) :

@@ -142,8 +142,8 @@ class SooLBuilder:
 		for pdsc in self.pdsc_handlers :
 			j = 1
 			logger.info(f"Read PDSC {pdsc.path}")
-			for chip_definition in pdsc.associations :
-				logger.debug(f"Handling PDSC {i:2d}/{len(self.pdsc_handlers)} - Assoc {j:3d}/{len(pdsc.associations)}.")
+			for chip_definition in pdsc.chips :
+				logger.debug(f"Handling PDSC {i:2d}/{len(self.pdsc_handlers)} - Assoc {j:3d}/{len(pdsc.chips)}.")
 				j += 1
 				if not chip_definition.is_full :
 					logger.error("\tSkip not full association.")
@@ -198,8 +198,8 @@ class SooLBuilder:
 		for c in to_be_removed :
 			ChipSet.reference_chipset.remove(c)
 			for pdsc in self.pdsc_handlers :
-				if c in pdsc.associations :
-					pdsc.associations.remove(c)
+				if c in pdsc.chips :
+					pdsc.chips.remove(c)
 		ChipSet.reference_chipset.chips = set(list(ChipSet.reference_chipset.chips))
 
 	def process_svd(self):
