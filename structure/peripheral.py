@@ -355,20 +355,25 @@ class Peripheral(Component) :
 				i+= 1
 			else :
 				self.registers.pop(i)
-		headers: T.List[CMSISHeader] = list()
-		for chip in self.chips.chips :
-			if not chip.header_handler.is_structural :
-				raise AssertionError(f"header {chip.header_handler.path} doesn't contain structures")
-			elif chip.header_handler not in headers and\
-					self.name in chip.header_handler.periph_table :
-				headers.append(chip.header_handler)
 
-		if len(headers) > 0 :
-			for header in headers :
+		self.after_svd_compile_cmsis_coherency_check()
+
+	def after_svd_compile_cmsis_coherency_check(self):
+		# Checking structure against registered headers to try to find discrepancies.
+		# In case no CMSIS structure is found, we just assume that the SVD is right.
+		headers: T.List[CMSISHeader] = list()
+		for chip in self.chips.chips:
+			if not chip.header_handler.is_structural:
+				raise AssertionError(f"Header {chip.header_handler.path} doesn't contain structures")
+			elif chip.header_handler not in headers and \
+					self.name in chip.header_handler.periph_table:
+				headers.append(chip.header_handler)
+		if len(headers) > 0:
+			for header in headers:
 				cmsis_periph = header.periph_table[self.name]
 				self.check_cmsis_header(cmsis_periph)
-		else :
-			logger.warning(f"no header has a definition for peripheral {self}")
+		else:
+			logger.warning(f"No header has a definition for peripheral {self} given chips {self.chips}")
 
 	def intra_svd_merge(self, other: "Peripheral") :
 		super().intra_svd_merge(other)
