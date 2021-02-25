@@ -19,7 +19,7 @@
 
 from tools import ParametersHandler
 from tools import SoolManifest
-
+from tools import Checkpoints
 
 from FileSetHandler import PDSCHandler
 from FileSetHandler import FileSetLocator
@@ -62,6 +62,10 @@ class SooLBuilder:
 		self.skip_analysis : bool = False
 
 		self.packs_handlers: T.Dict[str,KeilPack] = dict()
+
+		self.checkpoint_status : Checkpoints = Checkpoints()
+		for c in ParametersHandler.checkpoint_list :
+			self.checkpoint_status.add_chkpt(c)
 
 	def initialize_filestructure(self):
 		if not os.path.exists(self.params.svd_path) or self.params.fileset_reinit:
@@ -243,10 +247,12 @@ class SooLBuilder:
 			logger.info(f"Finalizing {name}")
 			group.finalize()
 
-	def dump_analysis(self):
-		logger.info("Dumping data to .data/SooL.dat")
-		with open(".data/SooL.dat", "wb") as dump_file:
-			pickle.dump(self.groups, dump_file)
+	def checkpoint(self, name):
+		self.checkpoint_status.pass_checkpoint(name)
+		if name in self.params.checkpoint_request :
+			self.checkpoint_status.perform_checkpoint(name,self)
+		if len(self.params.checkpoint_request) > 0 :
+			self.checkpoint_status.save()
 
 	def generate_output(self):
 		logger.info("Printing output files...")
@@ -329,28 +335,37 @@ class SooLBuilder:
 			self.skip_analysis = False
 			logger.error(f"Error while trying to reuse a previous database : {e.__cause__}")
 
-	def perform_analysis(self):
-		self.initialize_filestructure()
-		self.update_fileset()
-		self.process_pdsc()
-		self.write_pdsc_infos_in_manifest()
-		self.extract_svd_from_pdsc()
-		# Experimental
-		self.harden_svd_using_cube_ide()
-		# End - Experimental
-		self.process_svd()
-		self.final_merge()
-		self.generate_parent_classes()
-		self.finalize()
-		if self.params.dump_db:
-			self.dump_analysis()
+	def perform_analysis(self) :
+		if not self.checkpoint_status["POST_PDSC"] :
+			self.initialize_filestructure()
+			self.update_fileset()
+			self.process_pdsc()
+			self.write_pdsc_infos_in_manifest()
+			self.checkpoint("POST_PDSC")
+
+		if not self.checkpoint_status["POST_SVD"] :
+			self.extract_svd_from_pdsc()
+			# Experimental
+			self.harden_svd_using_cube_ide()
+			# End - Experimental
+			self.process_svd()
+			self.checkpoint("POST_SVD")
+
+		if not self.checkpoint_status["POST_MERGE"] :
+			self.final_merge()
+			self.checkpoint("POST_MERGE")
+
+		if not self.checkpoint_status["POST_ANALYZE"] :
+			self.generate_parent_classes()
+			self.finalize()
+			self.checkpoint("POST_ANALYZE")
 
 	def run(self):
-		if self.params.reuse_db :
-			self.restore_analysis()
-		if not self.skip_analysis :
-			self.perform_analysis()
-
+		# if self.params.reuse_db :
+		# 	self.restore_analysis()
+		# if not self.skip_analysis :
+		# 	self.perform_analysis()
+		self.perform_analysis()
 		self.write_chips_infos_in_manifest()
 		self.generate_output()
 		self.generate_optionals()

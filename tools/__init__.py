@@ -16,6 +16,7 @@
 #  You should have received a copy of the GNU Lesser General Public License    *
 #  along with SooL core Library. If not, see  <https://www.gnu.org/licenses/>. *
 # ******************************************************************************
-from tools.parameters import ParametersHandler, global_parameters
+from .parameters import ParametersHandler
+from .parameters import global_parameters
 from .sool_manifest import SoolManifest
-
+from .checkpoint_handler import Checkpoints

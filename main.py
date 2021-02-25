@@ -59,10 +59,7 @@ if __name__ == "__main__" :
 
 	from time import time
 	from builder import SooLBuilder
-
-	import xml.dom.minidom as minidom
-	import xml.etree.ElementTree as ET
-	import os
+	from tools import Checkpoints
 
 	logger.info("Tool startup")
 	parser = argparse.ArgumentParser(description="A tool to pre-build SooL")
@@ -106,6 +103,15 @@ if __name__ == "__main__" :
 						help="Generation options. " +
 						  "Available options are :\n\t" +
 						  "\n\t".join([f"{n} : {x}" for n,x in global_parameters.generate_options.items()]))
+	parser.add_argument("--checkpoint",
+						nargs="+",
+						default=list(),
+						choices=global_parameters.checkpoint_list + ["ALL"],
+						help="Potential checkpoints to do.")
+	parser.add_argument("--restore",
+						default=None,
+						choices=global_parameters.checkpoint_list + ["LAST"],
+						help = "Restoration point")
 	parser.add_argument("-k","--keep-generated",
 						action="store_false",
 						dest="refresh_output",
@@ -114,9 +120,6 @@ if __name__ == "__main__" :
 						help="Job ammount, be careful of RAM usage...",
 						default=1,
 						type=int)
-	parser.add_argument("--reuse",
-						action="store_true",
-						help="Reuse an existing .data/SooL.dat file to skip the analysis step.")
 	parser.add_argument("--force-version",
 						action="store_true",
 						help="Force packs versions as default version, skip online lookup")
@@ -137,8 +140,19 @@ if __name__ == "__main__" :
 	args = parser.parse_args()
 
 	global_parameters.read_args(args,global_parameters.defined_keil_archive)
+	if global_parameters.checkpoint_restore_point is not None :
+		old_checkpoint = Checkpoints.load()
+		if old_checkpoint is not None :
+			builder : SooLBuilder =  old_checkpoint.restore(global_parameters.checkpoint_restore_point)
+			if builder is None :
+				builder = SooLBuilder(global_parameters)
+			else:
+				builder.params = global_parameters
+		else :
+			builder = SooLBuilder(global_parameters)
+	else :
+		builder = SooLBuilder(global_parameters)
 
-	builder = SooLBuilder(global_parameters)
 	start_time = time()
 	builder.run()
 	end_time = time()

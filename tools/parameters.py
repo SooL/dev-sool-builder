@@ -29,7 +29,6 @@ logger = logging.getLogger()
 class ParametersHandler :
 	generate_options = {"no-phy" 	: "Generate to allow targetting a non-physical device (emulation).",
 						"big-endian": "Swich to big endian memory organization.",
-						"dump"		: "Dump the database into .data/SooL.dat.",
 						"sql"		: "Dump the final database into out/database.sqlite3",
 						"rccf"		: "RCC functions"}
 
@@ -70,6 +69,13 @@ class ParametersHandler :
 		"STM32WB": "1.1.0"
 	}
 
+	checkpoint_list = [
+		"POST_PDSC",
+		"POST_SVD",
+		"POST_MERGE",
+		"POST_ANALYZE"
+	]
+
 	def __init__(self):
 		self.reuse_db			: bool = False
 		self.dump_db			: bool = False
@@ -90,6 +96,9 @@ class ParametersHandler :
 		self.family_update_request : T.List[str] = list()
 		self.family_upgrade_request: T.List[str] = list()
 		self.fileset_reinit		: bool = False
+
+		self.checkpoint_request : T.Set[str] = set()
+		self.checkpoint_restore_point : str = None
 
 		self.cubeide_path		: str = None
 		self.manifest_copy_path : str = None
@@ -123,11 +132,9 @@ class ParametersHandler :
 	def to_xml(self) -> ET.Element:
 		root = ET.Element("runtime-parameters")
 		generation_sec : ET.Element = ET.SubElement(root,"generation")
-		generation_sec.append(ET.Element("dump-run", {"value": "true" if self.dump_db else "false"}))
 		generation_sec.append(ET.Element("dump-sql", {"value": "true" if self.dump_sql else "false"}))
 		generation_sec.append(ET.Element("no-phy-avail", {"value": "false" if self.physical_mapping else "true"}))
 		generation_sec.append(ET.Element("endianness", {"value": "big" if self.big_endian else "little"}))
-		generation_sec.append(ET.Element("reuse-run", {"value": "true" if self.reuse_db else "false"}))
 
 		filters_sec : ET.Element = ET.SubElement(root,"filters",{"requested":"true" if len(self.group_filter) else "false"})
 		for group in sorted(self.group_filter) :
@@ -211,11 +218,32 @@ class ParametersHandler :
 			else :
 				logger.error(f"Unrecognized option provided to generate : {token} will be ignored.")
 
+	def process_checkpoints(self,chkpt_request,chkpt_restore):
+		for chkpt in chkpt_request :
+			if chkpt == "ALL" :
+				self.checkpoint_request = set(self.checkpoint_list)
+				break
+			elif chkpt in ParametersHandler.checkpoint_list :
+				self.checkpoint_request.add(chkpt)
+			else:
+				raise KeyError
+
+		if chkpt_restore is not None :
+			if chkpt_restore == "LAST" :
+				self.checkpoint_restore_point = self.checkpoint_list[-1]
+			elif chkpt_restore not in self.checkpoint_list :
+				raise KeyError
+			else :
+				self.checkpoint_restore_point = chkpt_restore
+
+	def checkpoint_needed(self,chkpt):
+		return chkpt in self.checkpoint_request
+
 	def read_args(self,args,archive_list):
 		self.archives = archive_list
-		self.reuse_db 			= args.reuse
 
 		self.process_generate(args.generate)
+		self.process_checkpoints(args.checkpoint, args.restore)
 		# self.physical_mapping 	= not args.no_phy
 		# self.big_endian			= args.big_endian
 
