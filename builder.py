@@ -75,6 +75,11 @@ class SooLBuilder:
 			os.makedirs(self.params.packs_path, exist_ok=True)
 			os.makedirs(self.params.cmsis_path, exist_ok=True)
 
+			if not self.params.update_requested :
+				logger.info("No update requested on a first initialisation. Forcing full refresh")
+				self.params.update_requested = True
+				self.params.process_updates("all","all")
+
 
 		if self.params.refresh_output:
 			if os.path.exists("out/"):

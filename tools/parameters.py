@@ -239,6 +239,18 @@ class ParametersHandler :
 	def checkpoint_needed(self,chkpt):
 		return chkpt in self.checkpoint_request
 
+	def process_updates(self, update,upgrade):
+		if self.update_requested:
+			if 'all' in update:
+				self.fileset_reinit = True
+				self.family_update_request = list(self.archives.keys())
+			elif 'all' in upgrade:
+				self.family_update_request.extend(update)
+				self.family_upgrade_request = list(self.archives.keys())
+			else:
+				self.family_update_request.extend(update)
+				self.family_upgrade_request.extend(upgrade)
+
 	def read_args(self,args,archive_list):
 		self.archives = archive_list
 
@@ -268,21 +280,15 @@ class ParametersHandler :
 		self.chips_filter = args.chips_filter
 		self.chips_exclude = args.chips_exclude
 
-		if self.update_requested :
-			if 'all' in args.update_svd :
-				self.fileset_reinit = True
-				self.family_update_request = list(self.archives.keys())
-			elif 'all' in args.upgrade_svd :
-				self.family_update_request.extend(args.update_svd)
-				self.family_upgrade_request= list(self.archives.keys())
-			else :
-				self.family_update_request.extend(args.update_svd)
-				self.family_upgrade_request.extend(args.upgrade_svd)
+		update_list = args.update_svd
+		upgrade_list = args.upgrade_svd
+		self.process_updates(update_list,upgrade_list)
 
 		for exclude in self.chips_exclude :
 			self.family_upgrade_request = [f for f in self.family_upgrade_request if not fnmatch.fnmatch(f, exclude)]
 			self.family_update_request =  [f for f in self.family_update_request  if not fnmatch.fnmatch(f, exclude)]
 
 
-		
+
+
 global_parameters = ParametersHandler()
