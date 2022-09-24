@@ -67,6 +67,8 @@ class SooLBuilder:
 		for c in ParametersHandler.checkpoint_list :
 			self.checkpoint_status.add_chkpt(c)
 
+		self._scraped_page = None
+
 	def initialize_filestructure(self):
 		if not os.path.exists(self.params.svd_path) or self.params.fileset_reinit:
 			logger.info("First initialization")
@@ -112,10 +114,15 @@ class SooLBuilder:
 				logger.warning(f"\t{chip}")
 		else:
 			logger.info("All families retrieved")
+		self._scraped_page = None
+
 
 	def retrieve_packs(self,chip_family):
 		p = KeilPack(chip_family)
-		p.setup_version()
+		p.setup_version(self._scraped_page)
+		if p.scraped_base_page is not None :
+			self._scraped_page = p.scraped_base_page
+
 		p.download_to(self.params.packs_path if self.params.store_packs or self.params.use_local_packs else None)
 
 		self.packs_handlers[chip_family] = p

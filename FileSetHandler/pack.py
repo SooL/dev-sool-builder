@@ -28,6 +28,10 @@ import urllib.error
 import json
 import io
 
+from deprecated import deprecated
+import requests
+from bs4  import BeautifulSoup
+
 from tools import global_parameters
 
 logger = logging.getLogger()
@@ -108,10 +112,35 @@ class KeilPack:
 		self.extracted_path : str = None
 		self.__pdsc_path 	: str = None
 
+		self.scraped_base_page = None
+
+	def scrape_online_version(self, page_content = None):
+		logger.info(f"Fetching version using scraper")
+		try :
+			if page_content is None :
+				base_url = "https://www.keil.com/dd2/pack/"
+				page = requests.get(base_url)
+				content = page.content
+				self.scraped_base_page = content
+			else :
+				logger.info(f"Re-use scraped content.")
+				content = page_content
+			soup = BeautifulSoup(content,'html.parser')
+
+			header = soup.find("header",id=self.archive_basename[:-1])
+			new_version = header.find("span",class_="pack-version").text
+			new_version = new_version.strip()
+			self.version = new_version
+		except Exception as e :
+			logger.warning(f"Unable to scrape version for pack {self.archive_basename} : {e!s}")
+			raise  OnlineVersionUnavailableError(f"Unable to scrape version for pack {self.archive_basename} : {e!s}")
+		else :
+			logger.info(f"Selected version {self.version}")
+
+
+	@deprecated(reason="Until further notice, Keil API is buggy. Use scrape_online_version instead.")
 	def get_online_version(self):
 		base_url_check = "http://pack.keil.com/api/pack/check?pack="
-
-
 		url_check = base_url_check + self.archive_basename + "1.0.0.pack"
 
 		try:
@@ -136,11 +165,11 @@ class KeilPack:
 		self.version = global_parameters.default_archives_version[self.family]
 		logger.info(f"Selected version {self.version}")
 
-	def setup_version(self):
+	def setup_version(self,scraped_version_page = None):
 		logger.info(f"Getting version for family {self.family}")
 		if not global_parameters.force_pack_version :
 			try :
-				self.get_online_version()
+				self.scrape_online_version(scraped_version_page)
 			except OnlineVersionUnavailableError :
 				logger.info(f"Issue while getting online version, switching to default.")
 				self.get_default_version()
