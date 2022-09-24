@@ -268,7 +268,7 @@ class CMSISHeader:
 		if self.raw_memory is None :
 			return
 		self.memory_table = dict()
-		irq_mem = re.compile(r"\#define\s+(?P<name>\w+)\s+\(?(?P<type>\(\s*[^()]+\s*\)\s*)?\(?(?P<val>(?:[^ )\n]+\s*\+\s*)*[^ )\n]+)\)?")
+		irq_mem = re.compile(r"\#define\s+(?P<name>\w+_BASE)\s+\(?(?P<type>\(\s*[^()]+\s*\)\s*)?\(?(?P<val>(?:[^ )\n]+\s*\+\s*)*[^ )\n]+)\)?")
 		
 		for line in [x.strip() for x in self.raw_memory.split("\n")]:
 			if line == str():
