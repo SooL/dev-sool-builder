@@ -303,19 +303,24 @@ class CMSISHeader:
 			return
 		self.irq_table = dict()
 		irq_rexp = re.compile(r"(?P<id>\S+)\s+=\s+(?P<val>-?\d+)\s*,?\s*(?P<comment>.+)?")
-
+		in_comment = False
 
 		for line in [x.strip() for x in self.raw_irq_table.split("\n")] :
 			if line == str() :
+				continue
+			if in_comment :
+				in_comment = not "*/" in line
 				continue
 
 			result = irq_rexp.search(line)
 			if result :
 				data = result.groupdict()
 				self.irq_table[data["id"]] = int(data["val"])
+				if "/*" in line and not "*/" in line :
+					in_comment = True
 			else :
 				if not ( "enum" in line or "/*" in line or "{" in line or "}" in line or "MAX_IRQ_n" in line) :
-					logger.warning(f"IRQ line match failure: {line}")
+					logger.warning(f"IRQ line match failure in file {self.file_name}: {line}")
 
 	def process_cmsis_conf(self):
 		"""
