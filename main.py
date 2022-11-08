@@ -24,7 +24,7 @@
 
 import argparse
 import logging
-from tools import global_parameters
+from sool.tools import global_parameters
 
 ########################################################################################################################
 #                                                 LOGGER SETTING                                                       #
@@ -59,7 +59,7 @@ if __name__ == "__main__" :
 
 	from time import time
 	from builder import SooLBuilder
-	from tools import Checkpoints
+	from sool.tools import Checkpoints
 
 	logger.info("Tool startup")
 	parser = argparse.ArgumentParser(description="A tool to pre-build SooL")

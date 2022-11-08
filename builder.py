@@ -17,27 +17,27 @@
 #  along with SooL core Library. If not, see  <https://www.gnu.org/licenses/>. *
 # ******************************************************************************
 
-from tools import ParametersHandler
-from tools import SoolManifest
-from tools import Checkpoints
+from sool.tools import ParametersHandler
+from sool.tools import SoolManifest
+from sool.tools import Checkpoints
 
-from FileSetHandler import PDSCHandler
-from FileSetHandler import FileSetLocator
-from FileSetHandler import STFilesetHandler
-from FileSetHandler import SVDFile
-from FileSetHandler import KeilPack
+from sool.fileset_handlers import PDSCHandler
+from sool.fileset_handlers import FileSetLocator
+from sool.fileset_handlers import STFilesetHandler
+from sool.fileset_handlers import SVDFile
+from sool.fileset_handlers import KeilPack
 
-from structure import Group
-from structure import ChipSet
+from sool.structure import Group
+from sool.structure import ChipSet
 
-from dispatchers import svd_process_handler
+from sool.dispatchers.svd_dispatcher import svd_process_handler
 
-from generators import generate_sool_cmsis_config
-from generators import generate_sool_irqn
-from generators import generate_sool_chip_setup
-from generators import generate_records
-from generators import generate_get_reg
-from generators import generate_get_bit
+from sool.generators import generate_sool_cmsis_config
+from sool.generators import generate_sool_irqn
+from sool.generators import generate_sool_chip_setup
+from sool.generators import generate_records
+from sool.generators import generate_get_reg
+from sool.generators import generate_get_bit
 
 
 import typing as T
