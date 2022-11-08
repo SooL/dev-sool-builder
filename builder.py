@@ -116,11 +116,11 @@ class SooLBuilder:
 			logger.info("All families retrieved")
 		self._scraped_page = None
 
-
 	def retrieve_packs(self,chip_family):
-		p = KeilPack(chip_family)
-		p.setup_version(self._scraped_page)
-		if p.scraped_base_page is not None :
+
+		p = KeilPack(chip_family,scraped_content=self._scraped_page)
+		p.setup_version()
+		if self._scraped_page is None and p.scraped_base_page is not None :
 			self._scraped_page = p.scraped_base_page
 
 		p.download_to(self.params.packs_path if self.params.store_packs or self.params.use_local_packs else None)

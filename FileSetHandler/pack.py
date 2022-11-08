@@ -104,39 +104,61 @@ class KeilPack:
 		ret.location = path
 		return ret
 
-	def __init__(self, family : str):
+	def __init__(self, family : str, scraped_content = None):
+		"""
+		This class manages a Keil resource pack and every operation related.
+		:param family: Family string (e.g. STM32F0) related to the pack.
+		:param scraped_content: The Keil page scraped content, if None, will be downloaded on request,
+		otherwise act as a cache.
+		"""
 		self.family = family.upper()
 		self.archive_basename = global_parameters.defined_keil_archive[self.family]
 		self.version 		: str = "0.0.0"
+		self.valid_versions : T.List[str] = list()
 		self.location 		: str = None
 		self.extracted_path : str = None
 		self.__pdsc_path 	: str = None
 
-		self.scraped_base_page = None
+		self.scraped_base_page = scraped_content
 
-	def scrape_online_version(self, page_content = None):
-		logger.info(f"Fetching version using scraper")
+	def scrape_latest_online_version(self):
+		"""
+		Scrape data from Keil pack page if required and select the latest version available for the current pack.
+		"""
+		if len(self.valid_versions) == 0 :
+			self.scrape_online_versions()
+
+		self.version = self.valid_versions[0]
+		logger.info(f"Selected version {self.version}")
+
+	def scrape_online_versions(self):
+		"""
+		Scrape the list of valid versions from Keil resource pack list page https://www.keil.com/dd2/pack/.
+		This will fill the valid version list with the latest version as index 0.
+		"""
+		logger.info(f"Fetching version list using scraper")
 		try :
-			if page_content is None :
+			if self.scraped_base_page is None :
 				base_url = "https://www.keil.com/dd2/pack/"
 				page = requests.get(base_url)
 				content = page.content
 				self.scraped_base_page = content
 			else :
 				logger.info(f"Re-use scraped content.")
-				content = page_content
+				content = self.scraped_base_page
 			soup = BeautifulSoup(content,'html.parser')
 
 			header = soup.find("header",id=self.archive_basename[:-1])
-			new_version = header.find("span",class_="pack-version").text
-			new_version = new_version.strip()
-			self.version = new_version
+			all_versions = header.parent.find_all(name="span",class_="pack-description-version")
+			self.valid_versions.clear()
+			for version in all_versions :
+				version_string = version.text # Should be exactly "Version: a.b.c"
+				self.valid_versions.append(version_string[version_string.rfind(" "):].strip())
+
+
 		except Exception as e :
 			logger.warning(f"Unable to scrape version for pack {self.archive_basename} : {e!s}")
 			raise  OnlineVersionUnavailableError(f"Unable to scrape version for pack {self.archive_basename} : {e!s}")
-		else :
-			logger.info(f"Selected version {self.version}")
-
 
 	@deprecated(reason="Until further notice, Keil API is buggy. Use scrape_online_version instead.")
 	def get_online_version(self):
@@ -165,11 +187,11 @@ class KeilPack:
 		self.version = global_parameters.default_archives_version[self.family]
 		logger.info(f"Selected version {self.version}")
 
-	def setup_version(self,scraped_version_page = None):
+	def setup_version(self):
 		logger.info(f"Getting version for family {self.family}")
 		if not global_parameters.force_pack_version :
 			try :
-				self.scrape_online_version(scraped_version_page)
+				self.scrape_latest_online_version()
 			except OnlineVersionUnavailableError :
 				logger.info(f"Issue while getting online version, switching to default.")
 				self.get_default_version()
