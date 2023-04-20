@@ -486,7 +486,8 @@ class Peripheral(Component) :
 		if self.has_template and not isinstance(self.parent, Peripheral):
 			out += f"{indent}template<typename tmpl={self.templates[-1].name}>\n"
 		inherit = f": public {self.inheritFrom.name}" if self.inherits else ""
-		out += f"{indent}class {self.name} {inherit}/// {self.brief}\n" \
+		out += f"#define SOOL_{self.name}_AVAILABLE\n" \
+			   f"{indent}class {self.name} {inherit}/// {self.brief}\n" \
 		       f"{indent}{{\n"\
 			   f"{indent}public:\n"
 		indent.increment()
