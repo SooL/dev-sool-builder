@@ -1,0 +1,7 @@
+*.log
+.idea
+.vscode
+.data
+__pycache__
+out
+core-basefiles/*_struct.h
