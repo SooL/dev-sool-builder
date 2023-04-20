@@ -1,20 +1,20 @@
 # ******************************************************************************
-#  Copyright (c) 2018-2020 FAUCHER Julien & FRANCE Loic.                       *
+#   Copyright (c) 2018-2022. FAUCHER Julien & FRANCE Loic.                     *
 #                                                                              *
-#  This file is part of SooL generator.                                        *
+#   This file is part of SooL generator.                                       *
 #                                                                              *
-#  SooL generator is free software: you can redistribute it and/or modify      *
-#  it under the terms of the GNU Lesser General Public License                 *
-#  as published by the Free Software Foundation, either version 3              *
-#  of the License, or (at your option) any later version.                      *
+#   SooL generator is free software: you can redistribute it and/or modify     *
+#   it under the terms of the GNU Lesser General Public License                *
+#   as published by the Free Software Foundation, either version 3             *
+#   of the License, or (at your option) any later version.                     *
 #                                                                              *
-#  SooL core Library is distributed in the hope that it will be useful,        *
-#  but WITHOUT ANY WARRANTY; without even the implied warranty of              *
-#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the                *
-#  GNU Lesser General Public License for more details.                         *
+#   SooL core Library is distributed in the hope that it will be useful,       *
+#   but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the               *
+#   GNU Lesser General Public License for more details.                        *
 #                                                                              *
-#  You should have received a copy of the GNU Lesser General Public License    *
-#  along with SooL core Library. If not, see  <https://www.gnu.org/licenses/>. *
+#   You should have received a copy of the GNU Lesser General Public License   *
+#   along with SooL core Library. If not, see  <https://www.gnu.org/licenses/>.*
 # ******************************************************************************
 
 import logging
@@ -47,6 +47,8 @@ class OnlineVersionUnavailableError(VersionUnavailableError):
 	def __init__(self,msg):
 		super().__init__(msg)
 
+class KeilPageUnavailableError(OnlineVersionUnavailableError):
+	pass
 
 class DefaultVersionUnavailableError(VersionUnavailableError):
 	def __init__(self,msg):
@@ -118,7 +120,6 @@ class KeilPack:
 		self.location 		: str = None
 		self.extracted_path : str = None
 		self.__pdsc_path 	: str = None
-
 		self.scraped_base_page = scraped_content
 
 	def scrape_latest_online_version(self):
@@ -131,6 +132,16 @@ class KeilPack:
 		self.version = self.valid_versions[0]
 		logger.info(f"Selected version {self.version}")
 
+	@staticmethod
+	def fetch_keil_page_content() -> str:
+		try :
+			base_url = "https://www.keil.com/dd2/pack/"
+			page = requests.get(base_url)
+			return str(page.content)
+		except Exception as e :
+			logger.error(f"Unable to fetch Keil package web-page for scraping : {e!s}")
+			raise KeilPageUnavailableError(f"Unable to fetch Keil package web-page for scraping : {e!s}")
+
 	def scrape_online_versions(self):
 		"""
 		Scrape the list of valid versions from Keil resource pack list page https://www.keil.com/dd2/pack/.
@@ -139,14 +150,13 @@ class KeilPack:
 		logger.info(f"Fetching version list using scraper")
 		try :
 			if self.scraped_base_page is None :
-				base_url = "https://www.keil.com/dd2/pack/"
-				page = requests.get(base_url)
-				content = page.content
-				self.scraped_base_page = content
+				self.scraped_base_page = self.fetch_keil_page_content()
 			else :
 				logger.info(f"Re-use scraped content.")
-				content = self.scraped_base_page
+
+			content = self.scraped_base_page
 			soup = BeautifulSoup(content,'html.parser')
+
 
 			header = soup.find("header",id=self.archive_basename[:-1])
 			all_versions = header.parent.find_all(name="span",class_="pack-description-version")
@@ -154,7 +164,6 @@ class KeilPack:
 			for version in all_versions :
 				version_string = version.text # Should be exactly "Version: a.b.c"
 				self.valid_versions.append(version_string[version_string.rfind(" "):].strip())
-
 
 		except Exception as e :
 			logger.warning(f"Unable to scrape version for pack {self.archive_basename} : {e!s}")
@@ -286,4 +295,10 @@ class KeilPack:
 		return self.__pdsc_path
 
 
+	@property
+	def have_retrieved_version(self) -> bool:
+		"""
+		:return: Whether the versions have been retrieved, based upon the presence of versions in valid versions list.
+		"""
+		return len(self.valid_versions) > 0
 

@@ -1,20 +1,20 @@
 # ******************************************************************************
-#  Copyright (c) 2018-2020 FAUCHER Julien & FRANCE Loic.                       *
+#   Copyright (c) 2018-2022. FAUCHER Julien & FRANCE Loic.                     *
 #                                                                              *
-#  This file is part of SooL generator.                                        *
+#   This file is part of SooL generator.                                       *
 #                                                                              *
-#  SooL generator is free software: you can redistribute it and/or modify      *
-#  it under the terms of the GNU Lesser General Public License                 *
-#  as published by the Free Software Foundation, either version 3              *
-#  of the License, or (at your option) any later version.                      *
+#   SooL generator is free software: you can redistribute it and/or modify     *
+#   it under the terms of the GNU Lesser General Public License                *
+#   as published by the Free Software Foundation, either version 3             *
+#   of the License, or (at your option) any later version.                     *
 #                                                                              *
-#  SooL core Library is distributed in the hope that it will be useful,        *
-#  but WITHOUT ANY WARRANTY; without even the implied warranty of              *
-#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the                *
-#  GNU Lesser General Public License for more details.                         *
+#   SooL core Library is distributed in the hope that it will be useful,       *
+#   but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the               *
+#   GNU Lesser General Public License for more details.                        *
 #                                                                              *
-#  You should have received a copy of the GNU Lesser General Public License    *
-#  along with SooL core Library. If not, see  <https://www.gnu.org/licenses/>. *
+#   You should have received a copy of the GNU Lesser General Public License   *
+#   along with SooL core Library. If not, see  <https://www.gnu.org/licenses/>.*
 # ******************************************************************************
 
 import logging
@@ -175,7 +175,11 @@ class PDSCHandler:
 							   processor=chip.processor,
 							   pdefine=chip.processor_define))
 
-			shutil.copy(base_path + chip.svd,destination_paths["svd"])
+			try :
+				shutil.copy(base_path + chip.svd,destination_paths["svd"])
+			except FileNotFoundError as e :
+				print(f"File not found occured while handling chip {chip!r}.")
+				raise e
 
 			header_src =  base_path + chip.header
 			if header_src not in header_src_done :

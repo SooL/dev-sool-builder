@@ -1,26 +1,26 @@
 # ******************************************************************************
-#  Copyright (c) 2018-2020 FAUCHER Julien & FRANCE Loic.                       *
+#   Copyright (c) 2018-2022. FAUCHER Julien & FRANCE Loic.                     *
 #                                                                              *
-#  This file is part of SooL generator.                                        *
+#   This file is part of SooL generator.                                       *
 #                                                                              *
-#  SooL generator is free software: you can redistribute it and/or modify      *
-#  it under the terms of the GNU Lesser General Public License                 *
-#  as published by the Free Software Foundation, either version 3              *
-#  of the License, or (at your option) any later version.                      *
+#   SooL generator is free software: you can redistribute it and/or modify     *
+#   it under the terms of the GNU Lesser General Public License                *
+#   as published by the Free Software Foundation, either version 3             *
+#   of the License, or (at your option) any later version.                     *
 #                                                                              *
-#  SooL core Library is distributed in the hope that it will be useful,        *
-#  but WITHOUT ANY WARRANTY; without even the implied warranty of              *
-#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the                *
-#  GNU Lesser General Public License for more details.                         *
+#   SooL core Library is distributed in the hope that it will be useful,       *
+#   but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the               *
+#   GNU Lesser General Public License for more details.                        *
 #                                                                              *
-#  You should have received a copy of the GNU Lesser General Public License    *
-#  along with SooL core Library. If not, see  <https://www.gnu.org/licenses/>. *
+#   You should have received a copy of the GNU Lesser General Public License   *
+#   along with SooL core Library. If not, see  <https://www.gnu.org/licenses/>.*
 # ******************************************************************************
 
 import typing as T
 import xml.etree.ElementTree as ET
-from . import ChipSet
-from . import Component
+from .chipset import ChipSet
+from .component import Component
 from .utils import get_node_text, TabManager
 from .utils import DefinesHandler
 
