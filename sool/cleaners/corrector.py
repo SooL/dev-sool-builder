@@ -184,6 +184,7 @@ base_root_corrector = Corrector({
 			"CWSIZE"    : lambda reg : modify(reg, new_name="CWSIZER"),
 		})
 	},
+	"DMA"		: { "*" : DMA_periph_cleaner },
 	"DMAMUX*"   : lambda group: modify(group, new_name="DMAMUX"),
 	"DSIHOST"   : lambda group: modify(group, new_name="DSI"),
 	"DSI" 		: {

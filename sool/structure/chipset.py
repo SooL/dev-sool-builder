@@ -197,6 +197,9 @@ class ChipSet :
 		ret.remove(other)
 		return ret
 
+	def __len__(self) :
+		return len(self.chips)
+
 	@property
 	def families(self) ->T.Dict[str, T.Set[Chip]]:
 		if not self._families_up_to_date :
