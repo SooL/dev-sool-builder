@@ -31,6 +31,7 @@ def PERIPH_VERSION_REGISTERS_cleaner(periph: "Peripheral") :
 	from sool.structure import Register, Field
 	p_name = periph.name if periph.name is not None else periph.parent.name
 	corr = [
+		#Reg , header, candidates			  , description					, fields: [name, offset, size]
 		[None, None, ["VERR", "VER", "IP_VER"], f"{p_name} version register", [("MINREV", 0, 4), ("MAJREV", 4, 4)]],
 		[None, None, ["IPIDR", "IPDR", "ID"], f"{p_name} identification register", [("ID", 0, 32)]],
 		[None, None, ["SIDR", "SID"], f"{p_name} size identification register", [("SID", 0, 32)]],
@@ -184,7 +185,7 @@ def DMA_periph_cleaner(periph: "Peripheral") :
 	from sool.structure import Register, Field
 	if "CSELR" in periph :
 		# remove if not in header
-		# Found that in some STM32 (WB55) you can have the register in SVD but not in 
+		# Found that in some STM32 (WB55) you can have the register in SVD but not in
 		# RM nor Header.
 		chips_to_remove = list()
 		reg : Register = periph["CSELR"]
@@ -195,21 +196,21 @@ def DMA_periph_cleaner(periph: "Peripheral") :
 			lookup_periph = [chip.header_handler.periph_table[x] for x in chip.header_handler.periph_table if fnmatch(x,"DMA*")]
 			# Warning : lookup for...else loop : this is intended :)
 			for p in lookup_periph :
-				if "CSELR" in p : 
+				if "CSELR" in p :
 					break
 			else :
 				logger.error(f"CSELR found in SVD for chip {chip!r} while not in header")
 				chips_to_remove.append(chip)
-			
+
 		if len(chips_to_remove) > 0 :
 			# Remove invalid chips from the register list of chips.
 			reg.chips.remove(chips_to_remove)
 			reg.edited = True
 			if reg.chips.empty :
-				# If the register is not used anymore, delete it. 
-				periph.remove_register(reg)		
+				# If the register is not used anymore, delete it.
+				periph.remove_register(reg)
 		return
-		
+
 	chips = ChipSet()
 	pos = -1
 	for chip in periph.chips.chips :

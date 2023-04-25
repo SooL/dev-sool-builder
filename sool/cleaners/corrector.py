@@ -19,26 +19,27 @@
 
 import re
 import typing as T
+from functools import partial
 from fnmatch import fnmatch
 
 from . import *
 from sool.structure import Component
 
-def modify(obj, new_name=None, new_type=None, new_brief=None, new_size=None) :
-	if new_name is not None :
-		obj.name = new_name
-	if new_type is not None :
-		obj.type = new_type
-	if new_brief is not None :
-		obj.brief = new_brief
-	if new_size is not None :
-		obj.size = new_size
+def modify(obj, name=None, type=None, brief=None, size=None) :
+	if name is not None :
+		obj.name = name
+	if type is not None :
+		obj.type = type
+	if brief is not None :
+		obj.brief = brief
+	if size is not None :
+		obj.size = size
 
 def remove_prefix(obj, times=1) :
 	for i in range(times) :
 		if "_" not in obj.name :
 			return
-		modify(obj,new_name=obj.name[obj.name.index('_')+1:])
+		modify(obj,name=obj.name[obj.name.index('_')+1:])
 
 def clone_field(field, name=None, pos=None, brief=None, size=None) :
 	newField = Field(field.chips,
@@ -162,15 +163,15 @@ class Corrector:
 base_root_corrector = Corrector({
 
 	"ADC"       : { "*" : ADC_periph_cleaner },
-	"AES?"      : lambda group : modify(group, new_name="AES"),
+	"AES?"      : partial(modify, name="AES"),
 	"BSEC"      : { "*" : PERIPH_VERSION_REGISTERS_cleaner },
 	"CAN"       : { "*" : CAN_periph_base_cleaner },
-	"COMP?"      : lambda group : modify(group, new_name="COMP"),
+	"COMP?"     : partial(modify, name="COMP"),
 	"CRC"       : {
 		"*"         : (CRC_periph_cleaner, {
-			"DR"        : { "*" : {"Data_register" : lambda f : modify(f, new_name="DR") }},
-			"IDR"       : { "*" : {"Independent_data_register" : lambda f : modify(f, new_name="IDR") }},
-			"POL"       : { "*" : {"Polynomialcoefficients" : lambda f : modify(f, new_name="POL") }},
+			"DR"        : { "*" : {"Data_register" : partial(modify, name="DR") }},
+			"IDR"       : { "*" : {"Independent_data_register" : partial(modify, name="IDR") }},
+			"POL"       : { "*" : {"Polynomialcoefficients" : partial(modify, name="POL") }},
 		})
 	},
 	"CRYP"      : { "*" : PERIPH_VERSION_REGISTERS_cleaner },
@@ -178,15 +179,15 @@ base_root_corrector = Corrector({
 	"DBGMCU"    : { "*" : DBGMCU_periph_cleaner },
 	"DCMI"      : {
 		"*"         : (PERIPH_VERSION_REGISTERS_cleaner, {
-			"RIS"       : lambda reg : modify(reg, new_name="RISR"),
-			"MIS"       : lambda reg : modify(reg, new_name="MISR"),
-			"CWSTRT"    : lambda reg : modify(reg, new_name="CWSTRTR"),
-			"CWSIZE"    : lambda reg : modify(reg, new_name="CWSIZER"),
+			"RIS"       : partial(modify, name="RISR"),
+			"MIS"       : partial(modify, name="MISR"),
+			"CWSTRT"    : partial(modify, name="CWSTRTR"),
+			"CWSIZE"    : partial(modify, name="CWSIZER"),
 		})
 	},
 	"DMA"		: { "*" : DMA_periph_cleaner },
-	"DMAMUX*"   : lambda group: modify(group, new_name="DMAMUX"),
-	"DSIHOST"   : lambda group: modify(group, new_name="DSI"),
+	"DMAMUX*"   : partial(modify, name="DMAMUX"),
+	"DSIHOST"   : partial(modify, name="DSI"),
 	"DSI" 		: {
 		"*" : (DSI_periph_cleaner,{
 			"DSIHSOT_*" : remove_prefix,
@@ -196,21 +197,21 @@ base_root_corrector = Corrector({
 	"FLASH"     : {
 		"*"         : (FLASH_periph_cleaner, {
 			"PCROP*"    : { "*" : {
-				"PCROP*_*"  : lambda field : modify(field, new_name=field.name[field.name.index('_')+1:]),
-				"STRT"      : lambda field : modify(field, new_size=16),
+				"PCROP*_*"  : lambda field : modify(field, name=field.name[field.name.index('_')+1:]),
+				"STRT"      : partial(modify, size=16),
 			}},
 			"WRP*"      : { "*" : {
-				"WRP*_*"    : lambda field : modify(field, new_name=field.name[field.name.index('_')+1:]),
-				"WRP?"      : lambda field : modify(field, new_name=field.name[:-1]),
+				"WRP*_*"    : lambda field : modify(field, name=field.name[field.name.index('_')+1:]),
+				"WRP?"      : lambda field : modify(field, name=field.name[:-1]),
 				"STRT"      : FLASH_WRPxR_field_cleaner,
 				"END"       : FLASH_WRPxR_field_cleaner,
 			}}
 		})
 	},
-	"GIC*"    : lambda group: modify(group, new_name="GIC"),
+	"GIC*"    : partial(modify, name="GIC"),
 	"GPIO"      : {
 		"*"        : (GPIO_periph_cleaner, {
-			"OSPEEDER"  : lambda reg: modify(reg, new_name="OSPEEDR"),
+			"OSPEEDER"  : partial(modify, name="OSPEEDR"),
 			"*"         : {
 			    "*"         : (GPIO_reg_var_cleaner, {
 				    "*"         : GPIO_field_cleaner
@@ -218,35 +219,35 @@ base_root_corrector = Corrector({
 			},
 		})
 	},
-	"GTZC"		: lambda group: modify(group, new_name="TZC"),
+	"GTZC"		: partial(modify, name="TZC"),
 	"HASH"     : {
 		"*"         : {
-			"HASH_HR*"  : lambda reg : modify(reg, new_name=reg.name[5:]),
+			"HASH_HR*"  : lambda reg : modify(reg, name=reg.name[5:]),
 			"HR*"       : { "*" : {
-				"H*"        : lambda field : modify(field, new_name="H")
+				"H*"        : partial(modify, name="H")
 			}},
 			"CSR*"      : { "*" : {
-				"CS*"       : lambda field : modify(field, new_name="CS")
+				"CS*"       : partial(modify, name="CS")
 			}}
 		},
 	},
 	"HRTIM"     : { "*" : HRTIM_periph_cleaner },
 	"I2C"       : { "*" : I2C_periph_cleaner },
 	"IPCC"      : { "*" : PERIPH_VERSION_REGISTERS_cleaner },
-	"LPUART"    : lambda group: modify(group, new_name="USART"),
+	"LPUART"    : partial(modify, name="USART"),
 	"LTDC"		: { "*" : LTCD_fix_periph_cleaner},
 	"MDMA"      : { "*" : PERIPH_VERSION_REGISTERS_cleaner },
-	"RAMECC"    : { "*" : lambda periph: modify(periph, new_name="RAMECC") },
+	"RAMECC"    : { "*" : partial(modify, name="RAMECC") },
 	"RCC"       : {
 		"*"         : {
-			"C*_*" : lambda reg : modify(reg,new_name=reg.name[reg.name.find("_")+1:]),
+			"C*_*" : lambda reg : modify(reg,name=reg.name[reg.name.find("_")+1:]),
 			"*ENR"      : { "*" : {
-				"GPIOP?EN"  : lambda field : modify(field, new_name=f"GPIO{field.name[-3]}EN")
+				"GPIOP?EN"  : lambda field : modify(field, name=f"GPIO{field.name[-3]}EN")
 			}},
-			"xA?B*EN*R*" : lambda reg : modify(reg, new_name=reg.name[1 :]),
-			"MxA?B*EN*R*" : lambda reg : modify(reg, new_name=reg.name[2 :]),
-			"PLLSYSCFGR" : lambda reg : modify(reg, new_name="PLLCFGR"),
-			"CCIPR1"    : lambda reg : modify(reg, new_name="CCIPR"),
+			"xA?B*EN*R*" : lambda reg : modify(reg, name=reg.name[1 :]),
+			"MxA?B*EN*R*" : lambda reg : modify(reg, name=reg.name[2 :]),
+			"PLLSYSCFGR" : partial(modify, name="PLLCFGR"),
+			"CCIPR1"    : partial(modify, name="CCIPR"),
 			"PLL*"   : { "*" : RCC_PLL_cleaner },
 		}
 	},
@@ -258,35 +259,35 @@ base_root_corrector = Corrector({
 		}
 	},
 	"SDMMC" : { "*" : PERIPH_VERSION_REGISTERS_cleaner },
-	"SERIALCONTROLL" : lambda group : modify(group, new_name="SERIAL_CONTROL"),
+	"SERIALCONTROLL" : partial(modify, name="SERIAL_CONTROL"),
 	"SYSCFG"    : {
 		"*"         : {
 			"EXTICR?"   : { "*" : {
-				"EXTI?*"    : lambda field : modify(field, new_brief=f"EXTI {field.name[4:]} configuration")
+				"EXTI?*"    : lambda field : modify(field, brief=f"EXTI {field.name[4:]} configuration")
 			}}
 		}
 	},
-	"TIM?*"     : lambda group: modify(group, new_name="TIM"),
+	"TIM?*"     : partial(modify, name="TIM"),
 	"TIM"       : { "*" : TIM_periph_cleaner },
 	"TZC"		: {"*" : TZC_periph_cleaner},
 	"USART"     : {
 		"*"         : (USART_periph_cleaner, {
-			"0x00000000": lambda reg : modify(reg, new_name="CR1"),
+			"0x00000000": partial(modify, name="CR1"),
 			"CR2"       : { "*" : {
-				"TAINV" : lambda field : modify(field, new_name="DATAINV")
+				"TAINV" : partial(modify, name="DATAINV")
 			}}
 		}),
 	},
-	"USB_*"     : lambda group: modify(group, new_name="USB"),
+	"USB_*"     : partial(modify, name="USB"),
 	"USB"       : { "*" : USB_periph_cleaner },
-	"RNG1"     : lambda group: modify(group, new_name="RNG"),
+	"RNG1"     : partial(modify, name="RNG"),
 	"SERIAL_CONTROL" : (SERIAL_CONTROL_group_cleaner, {
 		"*"         : (SERIAL_CONTROL_periph_cleaner, {
-			"SC?_*"     : lambda reg : modify(reg, new_name=reg.name[4:])
+			"SC?_*"     : lambda reg : modify(reg, name=reg.name[4:])
 		}),
 	}),
 
-	"STGENR" : lambda group : modify(group, new_name="STGEN"),
+	"STGENR" : partial(modify, name="STGEN"),
 
 	"*"	        : {
 		"*"         : {
@@ -312,8 +313,8 @@ advanced_root_corrector = Corrector({
 			"*ENR"      : { "*" : {
 				"IOP?EN"  : lambda field : clone_field(field, name=f"GPIO{field.name[-3]}EN")
 			}},
-			"xA?B*EN*R*"  : lambda reg : modify(reg, new_name=reg.name[1:]),
-			"MxA?B*EN*R*" : lambda reg : modify(reg, new_name=reg.name[2:])
+			"xA?B*EN*R*"  : lambda reg : modify(reg, name=reg.name[1:]),
+			"MxA?B*EN*R*" : lambda reg : modify(reg, name=reg.name[2:])
 		}
 	},
 	"SYSCFG"    : { "*" : SYSCFG_periph_advanced_cleaner},
