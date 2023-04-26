@@ -20,13 +20,16 @@
 import os
 import logging
 import typing as T
-import sqlite3 as sql
 import xml.etree.ElementTree as ET
 from fnmatch import fnmatch
 from sool.cmsis_analysis import CMSISHeader
 
 logger = logging.getLogger()
 
+
+################################################################################
+#                                     CHIP                                     #
+################################################################################
 
 class Chip:
 	def __init__(self,define = None,header = None ,svd = None, processor = None, pdefine = None, cmsis_options : T.Dict[str,str] = None ):
@@ -35,7 +38,6 @@ class Chip:
 		self.svd 	: str = svd
 		self.processor: str = processor
 		self.processor_define : str = pdefine
-		self.sql_id : int = None
 		self.header_handler : CMSISHeader = None
 		self.cmsis_options : T.Dict[str,str] = cmsis_options
 
@@ -113,17 +115,10 @@ class Chip:
 			return self.name[:8]
 		return self.name[:7]
 
-	def generate_sql(self,cursor : sql.Cursor):
-		cursor.execute("INSERT INTO chips (name) VALUES (?)",(self.name,))
-		self.sql_id = cursor.lastrowid
 
-	def update_sql_id(self,cursor : sql.Cursor):
-		result = cursor.execute("SELECT id FROM chips WHERE name == :cname",{"cname":self.name}).fetchone()
-		if not result :
-			self.generate_sql(cursor)
-		else :
-			self.sql_id = int(result[0]);
-
+################################################################################
+#                                   CHIPSET                                    #
+################################################################################
 
 class ChipSet :
 	reference_chips_name_list : T.Set[str] = set()
@@ -157,25 +152,33 @@ class ChipSet :
 			return len(self.chips.symmetric_difference(other.chips)) == 0
 		else :
 			raise TypeError()
+		
+	def __iter__(self):
+		return iter(self.chips)
+	
+	def __len__(self) :
+		return len(self.chips)
 
-	def __ge__(self, other):
-		if isinstance(other,ChipSet) :
+	def __contains__(self, other: T.Union[Chip, "ChipSet"]) :
+		if isinstance(other, ChipSet) :
 			return self.chips.issuperset(other.chips)
+		elif isinstance(other, Chip) :
+			return other in self.chips
 		else :
 			raise TypeError()
+
+	__ge__ = __contains__
 
 	def __hash__(self):
 		return hash(tuple(sorted([x.name for x in self.chips])))
 
-	def __iter__(self):
-		return iter(self.chips)
-
-	def __and__(self, other):
-		if isinstance(other,ChipSet) :
-			return ChipSet(self.chips & other.chips)
-	
 	def __str__(self):
 		return "\t".join(sorted([str(x) for x in self.chips]))
+
+	
+	def __and__(self, other):
+		if isinstance(other,ChipSet) :
+			return ChipSet(self.chips & other.chips)# intersection of the two chipsets
 
 	def __iadd__(self, other: T.Union[T.List[Chip], 'ChipSet', Chip]):
 		self.add(other)
@@ -196,9 +199,6 @@ class ChipSet :
 		ret : ChipSet = ChipSet(self.chips)
 		ret.remove(other)
 		return ret
-
-	def __len__(self) :
-		return len(self.chips)
 
 	@property
 	def families(self) ->T.Dict[str, T.Set[Chip]]:
@@ -296,7 +296,7 @@ class ChipSet :
 				return True
 		return False
 
-	def reverse(self,reference : T.Optional["ChipSet"]= None) -> None:
+	def reverse(self,reference : T.Optional["ChipSet"]= None):
 		if reference is None :
 			reference = ChipSet.reference_chipset
 		self.chips = (reference - self).chips
@@ -314,8 +314,4 @@ class ChipSet :
 			if c.name in name_list :
 				self.add(c)
 				name_list.remove(c.name)
-
-	def generate_sql(self,cursor : sql.Cursor):
-		for c in self :
-			c.generate_sql(cursor)
 

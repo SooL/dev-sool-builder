@@ -23,6 +23,8 @@ import typing as T
 from .chipset import ChipSet
 from .utils import TabManager
 from .utils import DefinesHandler
+from math import ceil
+from deprecated import deprecated
 import logging
 
 logger = logging.getLogger()
@@ -38,124 +40,172 @@ class Component:
 	             brief: T.Union[None, str] = None,
 				 parent: "Component" = None
 	             ):
-		self._name = None
-		self.edited = True
-		self.name : str = name
+		self.name = name
+		if brief is not None and brief != name :
+			self.brief = ' '.join(brief.split())
+		else :
+			self.brief = None
 		
 		self.chips = ChipSet(chips)
-		self.brief = None if brief is None else ' '.join(brief.replace("\n", " ").split())
-		if self.brief == self.name :
-			self.brief = None
 		self.parent = parent
+		self.children: T.List["Component"] = None
 
 	def __eq__(self, other):
 		return self.name == other.name
+	
+	def __iter__(self) -> T.Iterable["Component"]:
+		if self.children is None :
+			return self # no iteration
+		else :
+			return iter(self.children)
+		
+	def __next__(self) :
+		raise StopIteration
 
 	@property
 	def name(self):
 		return self._name
 
 	@name.setter
-	def name(self,new : str):
-		if new != self._name :
+	def name(self, new : str):
+		if self._name is None or new != self._name :
 			if new is not None :
-				new = new.replace("[","_").replace("]","")
 				if not new.isidentifier() and not new.isalnum():
 					logger.error(f"Setting non-alphanum component name {new}")
 			self._name = new
 			self.edited = True
-
+	
 	@property
-	def has_been_edited(self):
-		if self.edited :
-			return True
-		if hasattr(self,'__iter__') :
-			# noinspection PyTypeChecker
-			for child in self :
-				if child.has_been_edited :
-					return True
-		return False
+	def edited(self):
+		return self._edited
+	
+	def invalidate(self):
+		"""
+		Set self as edited, and all parents as edited de facto.
+		"""
+		if not self._edited :
+			self._edited = True
+			if self.parent is not None :
+				self.parent.invalidate()
 
-	def validate_edit(self):
-		if self.edited :
-			self.edited = False
-		if hasattr(self,'__iter__') :
-			# noinspection PyTypeChecker
-			for child in self :
-				child.validate_edit()
+	def invalidate_recursive(self) :
+		"""
+		Invalidate self as edited and all children, recursively.
+		De facto invalidate parents.
+		"""
+		self.invalidate()
+		for c in self :
+			c.invalidate_recursive()
+	
+	def validate(self):
+		self._edited = False
 
-	def attach_hierarchy(self):
-		if hasattr(self,'__iter__') :
-			# noinspection PyTypeChecker
-			for child in self :
-				child.set_parent(self)
-				child.attach_hierarchy()
-
-	def finalize(self):
-		if hasattr(self,'__iter__') :
-			# noinspection PyTypeChecker
-			for child in self :
-				child.set_parent(self)
-				child.finalize()
-				self.chips.add(child.chips)
-		self.chips.update_families()
+#vvvvv TODO vvvvv
+#	def validate_edit(self):
+#		if self.edited :
+#			self.edited = False
+#		if hasattr(self,'__iter__') :
+#			# noinspection PyTypeChecker
+#			for child in self :
+#				child.validate_edit()
+#
+#	def attach_hierarchy(self):
+#		if hasattr(self,'__iter__') :
+#			# noinspection PyTypeChecker
+#			for child in self :
+#				child.set_parent(self)
+#				child.attach_hierarchy()
+#
+#	def finalize(self):
+#		if hasattr(self,'__iter__') :
+#			# noinspection PyTypeChecker
+#			for child in self :
+#				child.set_parent(self)
+#				child.finalize()
+#				self.chips.add(child.chips)
+#		self.chips.update_families()
+# ^^^^^^^^^^
 
 	@property
 	def computed_chips(self):
 		out = ChipSet(self.chips)
-		if hasattr(self,'__iter__'):
-			child : Component
-			# noinspection PyTypeChecker
-			for child in self :
-				out.add(child.computed_chips)
+		for child in self :
+			out.add(child.computed_chips)
 		return out
 
 	@property
 	def size(self) -> int :
+		"""
+		:return: Size of the component, in bits
+		"""
 		return 0
 
 	@property
 	def byte_size(self) -> int :
-		return int(self.size / 8)
+		return ceil(self.size/8)
 
 	def exists_for(self, chip_pattern: str) -> bool :
 		return self.chips.match(chip_pattern)
 
 	def set_parent(self, parent: "Component"):
-		self.parent = parent
+		if self.parent is not parent :
+			self.invalidate()
+			self.parent = parent
+			self.parent.add_child(self)
+	
+	def add_child(self, child: "Component"):
+		self.invalidate()
+		self.children.append(child)
+		child.set_parent(self)
+		self.add_chips(child.chips)
+	
+	def add_chips(self, chips: T.Optional[ChipSet]):
+		if chips not in self.chips:
+			self.invalidate()
+			self.chips.add(chips)
+			self.parent.add_chips(chips)
 
-	def inter_svd_merge(self, other: "Component"):
-		self.chips.add(other.chips)
+	def absorb(self, other: "Component"):
+		"""
+		Merge other in self.
+		Keep self brief if not None, otherwise use other brief.
+		Merge ChipSets.
+		"""
 		if self.brief is None and other.brief is not None :
 			self.brief = other.brief
-
-	def intra_svd_merge(self, other: "Component"):
-		if self.brief is None and other.brief is not None :
-			self.brief = other.brief
+		
+		for other_child in other :
+			for self_child in self :
+				if other_child == self_child :
+					self_child.absorb(other_child)
+					break
+			else :
+				self.add_child(other_child)
+				
 
 ################################################################################
 #                            STRING REPRESENTATIONS                            #
 ################################################################################
 
 	def __str__(self) -> T.Union[None, str]:
-		return self.name if self.name is not None else f"{self.parent}.???"
+		return self.name if self.name is not None else f"{self.parent!s}.???"
 
 	def __repr__(self):
-		return str(self)
+		return f"<{type(self).__name__} {self!s}>"
 
 	@property
 	def alias(self) -> T.Union[None, str] :
 		"""
 		Returns the hierarchy up to this point.
 		Used as the defined pre-processor constant when needed.
-		:returns: the full name of the Component. Usually "<parent_alias>_<name>"
+		:return: the full name of the Component. Usually "<parent_alias>_<name>"
 		"""
 		if self.parent is None : return self.name
 		else :
 			parent_alias: T.Union[str, None] = self.parent.alias
 			if parent_alias is None : return self.name
 			elif self.name is None  : return parent_alias
-			else                    : return parent_alias + "_" + self.name
+			else                    : return f"{parent_alias}_{self.name}"
 
 ################################################################################
 #                          DEFINE, UNDEFINE & DECLARE                          #
@@ -165,7 +215,7 @@ class Component:
 	def needs_define(self) -> bool :
 		"""
 		Checks whether or not the Component needs to have its alias defined.
-		:returns: True if the Component needs to have its alias defined
+		:return: True if the Component needs to have its alias defined
 		"""
 		return (self.name is not None) and\
 		       (self.parent is not None) and\
@@ -173,14 +223,27 @@ class Component:
 
 	@property
 	def undefine(self) -> bool:
+		"""
+		Require '#undefine' directive at the end of generated header file
+		"""
 		return True
 
 	@property
 	def defined_value(self) -> T.Union[str, None]:
+		"""
+		Value to assign in '#define' statement
+		"""
 		return None
 
 	@property
+	@deprecated # needs refactor
 	def define_not(self) -> T.Union[bool, str] :
+		"""
+		/!\ TODO DEPRECATED. NEEDS REFACTOR (-> None / empty string / string)
+		:return: False if no '#define' is needed when not defined ;
+				 True if an empty '#define' is needed when not defined ;
+				 The string to '#define' when not defined
+		"""
 		return self.defined_value is not None
 
 	@property
@@ -192,71 +255,59 @@ class Component:
 			if self.chips not in defines :
 				defines[self.chips] = DefinesHandler()
 			defines[self.chips].add(
-				alias=self.defined_name,
-				defined_value= self.defined_value,
-				define_not= self.define_not,
-				undefine=self.undefine)
+				alias = self.defined_name,
+				defined_value = self.defined_value,
+				define_not = self.define_not,
+				undefine = self.undefine)
 
-		if hasattr(self,'__iter__'):
-			child : Component
-			# noinspection PyTypeChecker
-			for child in self :
-				child.define(defines)
+		for child in self :
+			child.define(defines)
 
-	def declare(self, indent: TabManager = TabManager()) -> T.Union[None,str] :
+	def declare(self, indent: TabManager = TabManager()) -> T.Optional[str] :
 		return None
 
 ################################################################################
 #                                     FIX                                      #
 ################################################################################
-
-	def before_svd_compile(self, parent_corrector) :
-		"""
-		Applies corrections, prepare templates
-		"""
-
-		correctors = None if (parent_corrector is None) else parent_corrector[self]
-
-		if (correctors is not None) and (len(correctors) > 0) :
-			for corrector in correctors :
-				if hasattr(self, '__iter__') :
-					# noinspection PyTypeChecker
-					for child in self :
-						child.before_svd_compile(corrector)
-				corrector(self)
-		else :
-			if hasattr(self, '__iter__') :
-				# noinspection PyTypeChecker
-				for child in self :
-					child.before_svd_compile(None)
-
-
-	def svd_compile(self) :
-		"""
-		Merges identical child components
-		"""
-		if hasattr(self, '__iter__') :
-			# noinspection PyTypeChecker
-			for child in self :
-				child.svd_compile()
-
-	def after_svd_compile(self, parent_corrector) :
-		"""
-		Cleans the component and its children, checks for potential errors, applies advanced corrections
-		:return:
-		"""
-
-		correctors = None if (parent_corrector is None) else parent_corrector[self]
-
-		if (correctors is not None) and (len(correctors) > 0) :
-			for corrector in correctors :
-				if hasattr(self, '__iter__') :
-					# noinspection PyTypeChecker
-					for child in self :
-						child.after_svd_compile(corrector)
-				corrector(self)
-		else :
-			if hasattr(self, '__iter__') :
-				# noinspection PyTypeChecker
-				for child in self :
-					child.after_svd_compile(None)
+#vvvvv TODO vvvvv
+#	def before_svd_compile(self, parent_corrector) :
+#		"""
+#		Applies corrections, prepare templates
+#		"""
+#
+#		correctors = None if (parent_corrector is None) else parent_corrector[self]
+#
+#		if (correctors is not None) and (len(correctors) > 0) :
+#			for corrector in correctors :
+#				for child in self :
+#					child.before_svd_compile(corrector)
+#				corrector(self)
+#		else :
+#			for child in self :
+#				child.before_svd_compile(None)
+#
+#
+#	def svd_compile(self) :
+#		"""
+#		Merges identical child components
+#		"""
+#		for child in self :
+#			child.svd_compile()
+#
+#	def after_svd_compile(self, parent_corrector) :
+#		"""
+#		Cleans the component and its children, checks for potential errors, applies advanced corrections
+#		:return:
+#		"""
+#
+#		correctors = None if (parent_corrector is None) else parent_corrector[self]
+#
+#		if (correctors is not None) and (len(correctors) > 0) :
+#			for corrector in correctors :
+#				for child in self :
+#					child.after_svd_compile(corrector)
+#				corrector(self)
+#		else :
+#			for child in self :
+#				child.after_svd_compile(None)
+#^^^^^^^^^^

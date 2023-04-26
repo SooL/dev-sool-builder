@@ -29,7 +29,6 @@ logger = logging.getLogger()
 class ParametersHandler :
 	generate_options = {"no-phy" 	: "Generate to allow targetting a non-physical device (emulation).",
 						"big-endian": "Swich to big endian memory organization.",
-						"sql"		: "Dump the final database into out/database.sqlite3",
 						"rccf"		: "RCC functions"}
 
 	defined_keil_archive = {
