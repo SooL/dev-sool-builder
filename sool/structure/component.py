@@ -18,16 +18,19 @@
 # ******************************************************************************
 
 import typing as T
+import logging
+from math import ceil
 
+from ..cleaners.corrector import Corrector
 
 from .chipset import ChipSet
 from .utils import TabManager
 from .utils import DefinesHandler
-from math import ceil
-from deprecated import deprecated
-import logging
 
 logger = logging.getLogger()
+
+class FixConvergenceError(Exception):
+	pass
 
 class Component:
 ################################################################################
@@ -94,11 +97,17 @@ class Component:
 		De facto invalidate parents.
 		"""
 		self.invalidate()
-		for c in self :
-			c.invalidate_recursive()
-	
+		for child in self :
+			child.invalidate_recursive()
+
 	def validate(self):
-		self._edited = False
+		"""
+		Validate self and all children, recursively.
+		"""
+		if self._edited :
+			self._edited = False
+			for child in self :
+				child.validate()
 
 #vvvvv TODO vvvvv
 #	def validate_edit(self):
@@ -229,22 +238,23 @@ class Component:
 		return True
 
 	@property
-	def defined_value(self) -> T.Union[str, None]:
+	def defined_value(self) -> T.Optional[str]:
 		"""
-		Value to assign in '#define' statement
+		Value to assign in the '#define' statement,
+		or None if no '#define' is required
 		"""
 		return None
 
 	@property
-	@deprecated # needs refactor
-	def define_not(self) -> T.Union[bool, str] :
+	def define_not(self) -> T.Optional[str] :
 		"""
-		/!\ TODO DEPRECATED. NEEDS REFACTOR (-> None / empty string / string)
-		:return: False if no '#define' is needed when not defined ;
-				 True if an empty '#define' is needed when not defined ;
-				 The string to '#define' when not defined
+		Value to assign in '#define' statement when the conditions are not met,
+		or None id no '#define' is required in that case
 		"""
-		return self.defined_value is not None
+		if self.defined_value is None :
+			return None
+		else :
+			return ""
 
 	@property
 	def defined_name(self) -> str :
@@ -269,6 +279,31 @@ class Component:
 ################################################################################
 #                                     FIX                                      #
 ################################################################################
+
+	def apply_fixes(self, parent_corrector: Corrector) :
+		"""
+		Extract appropriate correctors from the parent corrector,
+		and apply them to the component.
+		If the component is invalidated by one of the correctors,
+		Re-apply all correctors.
+		The correctors are recursively applied to children components.
+		"""
+		for _ in range(0, 100) :
+			self.validate()
+			correctors = parent_corrector[self]
+			if (correctors is not None and len(correctors) > 0) :
+				for corrector in correctors :
+					corrector(self)
+					for child in self :
+						child.apply_fixes(corrector)
+			if not self.edited :
+				break
+		else :
+			raise FixConvergenceError(f"Component {self} not valid "
+									   "after 100 fix iterations")
+
+
+
 #vvvvv TODO vvvvv
 #	def before_svd_compile(self, parent_corrector) :
 #		"""
