@@ -106,15 +106,15 @@ class PDSCHandler:
 				if "Pname" in processor.attrib and processor.attrib["Pname"] :
 					current_assoc.processor = processor.attrib["Pname"]
 
-				current_assoc.from_node(family)
+				current_assoc.complete_from_node(family)
 
 				for device in family.findall("device") :
-					current_assoc.from_node(device)
+					current_assoc.complete_from_node(device)
 
-					if not current_assoc.is_full :
+					if not current_assoc.is_complete :
 						logger.error(f"Incomplete fileset for chip {device.attrib['Dname']}.")
 					else:
-						current_assoc.legalize()
+						current_assoc.normalize()
 						if current_assoc.fix(device.attrib["Dname"]) :
 							# if not "STM32F1" in current_assoc.define and not fnmatch(device.attrib["Dname"],current_assoc.define.replace("x","?") + "*") :
 							# 	logger.warning(f"\tChip/Define mismatch {device.attrib['Dname']} got {current_assoc.define}")
@@ -166,7 +166,7 @@ class PDSCHandler:
 		header_src_done : T.Set[str] = set()
 		base_path = os.path.dirname(self.path) + "/"
 		for chip in self.chips :
-			if not chip.is_full :
+			if not chip.is_complete :
 				logger.warning(f"Ignored not full association for define {chip.computed_define}")
 				continue
 			ret.chips.add(Chip(svd=chip.svd,

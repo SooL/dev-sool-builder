@@ -22,7 +22,6 @@ import xml.etree.ElementTree as ET
 from .chipset import ChipSet
 from .component import Component
 from .utils import get_node_text, TabManager
-from .utils import DefinesHandler
 
 
 class Field(Component) :
@@ -42,9 +41,9 @@ class Field(Component) :
 		return field
 
 	def __init__(self,
-	             chips: T.Union[None, ChipSet] = None,
-	             name: T.Union[None, str] = None,
-	             brief: T.Union[None, str] = None,
+	             chips: T.Optional[ChipSet] = None,
+	             name: T.Optional[str] = None,
+	             brief: T.Optional[str] = None,
 	             position: int = 0,
 	             size: int = 1
 	             ) :
@@ -129,5 +128,8 @@ class Field(Component) :
 			return True
 
 	def fill_bit_mask(self, bit_mask: T.List[bool]):
+		"""
+		Set bits of the register occupied by the field to 1 in the bit mask
+		"""
 		for i in range(self.position, self.position + self.size - 1) :
 			bit_mask[i] = True

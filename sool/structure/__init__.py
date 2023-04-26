@@ -18,7 +18,8 @@
 # ******************************************************************************
 
 # Reminder : import variables and such before importing a module which may import it from here
-from .chipset import ChipSet, Chip
+from .chip import Chip
+from .chipset import ChipSet
 from .component import Component
 from .field import Field
 from .registervariant import RegisterVariant

@@ -17,108 +17,13 @@
 #   along with SooL core Library. If not, see  <https://www.gnu.org/licenses/>.*
 # ******************************************************************************
 
-import os
 import logging
 import typing as T
-import xml.etree.ElementTree as ET
 from fnmatch import fnmatch
-from sool.cmsis_analysis import CMSISHeader
+
+from .chip import Chip
 
 logger = logging.getLogger()
-
-
-################################################################################
-#                                     CHIP                                     #
-################################################################################
-
-class Chip:
-	def __init__(self,define = None,header = None ,svd = None, processor = None, pdefine = None, cmsis_options : T.Dict[str,str] = None ):
-		self.define : str = define
-		self.header : str = header
-		self.svd 	: str = svd
-		self.processor: str = processor
-		self.processor_define : str = pdefine
-		self.header_handler : CMSISHeader = None
-		self.cmsis_options : T.Dict[str,str] = cmsis_options
-
-	def __hash__(self):
-		return hash((self.define,self.header,self.svd,self.processor))
-
-	def __eq__(self, other):
-		if isinstance(other,Chip) :
-			return self.define == other.define and self.header == other.header and self.svd == other.svd and \
-				   self.processor == other.processor
-
-	def __repr__(self):
-		return f'{self.define}{"" if self.processor is None else "_" + self.processor:<5s} : H = {self.header} S = {self.svd}'
-
-	def __str__(self):
-		return self.name
-
-	def match(self, pattern):
-		return fnmatch(self.name, pattern)
-
-	@property
-	def is_full(self):
-		return self.define is not None and self.header is not None and self.svd is not None
-
-	def from_node(self,element : ET.Element):
-		headers = element.findall("compile[@header]")
-		defines = element.findall("compile[@define]")
-		svds = element.findall("debug[@svd]")
-
-		for header_node in headers:
-			if self.processor is None or ("Pname" in header_node.attrib and header_node.attrib["Pname"] == self.processor) :
-				self.header = header_node.attrib["header"]
-		for define_node in defines :
-			if self.processor is None or ("Pname" in define_node.attrib and define_node.attrib["Pname"] == self.processor):
-				self.define = define_node.attrib["define"]
-		for svd_node in svds:
-			self.svd = svd_node.attrib["svd"]
-
-		if self.processor is not None :
-			pdefs = element.findall("compile[@Pdefine]")
-			for pdef_node in pdefs:
-				if "Pname" in pdef_node.attrib and pdef_node.attrib["Pname"] == self.processor:
-					self.processor_define = pdef_node.attrib["Pdefine"]
-
-	@property
-	def computed_define(self):
-		return f'{self.define}{"_" + self.processor_define if self.processor_define is not None else ""}'
-
-	@property
-	def name(self):
-		return self.computed_define
-
-	def legalize(self):
-		self.header = self.header.replace("\\","/")
-		self.svd = self.svd.replace("\\", "/")
-		self.define = self.define.upper().replace("X","x")
-		# if 'g' in self.define:
-		# 	self.define = self.define.replace("g", "G")
-
-	def fix(self,chip_name : str) -> bool:
-		if fnmatch(chip_name,"STM32F401?[BCDE]*"):
-			return True
-			self.svd = os.path.dirname(self.svd) + "/STM32F401xE.svd"
-		elif fnmatch(chip_name,"STM32F401?[!BCDE]*"):
-			self.svd = os.path.dirname(self.svd) + "/STM32F401x.svd"
-		elif fnmatch(chip_name,"STM32G483*"):
-			return False
-		return True
-
-	@property
-	def family(self) -> str:
-		if not fnmatch(self.name,"STM32*") :
-			raise ValueError("Incompatible name")
-		if fnmatch(self.name,"STM32MP*"):
-			return self.name[:8]
-		return self.name[:7]
-
-
-################################################################################
-#                                   CHIPSET                                    #
-################################################################################
 
 class ChipSet :
 	reference_chips_name_list : T.Set[str] = set()
@@ -126,20 +31,14 @@ class ChipSet :
 	ref_lock = False
 	#reference_families : Dict[str,Set[str]] = dict()
 
-	@staticmethod
-	def get_family(chip_name : str):
-		if not fnmatch(chip_name,"STM32*") :
-			raise ValueError("Incompatible name")
-		if fnmatch(chip_name,"STM32MP*"):
-			return chip_name[:8]
-		return chip_name[:7]
-
 	def __init__(self, chips=None):
 		if chips is None:
 			chips = set()
 		self.chips: T.Set[Chip] = set()
-		self._families : T.Dict[str,T.Set[Chip]] = dict()
+		self._families : T.Dict[str, T.Set[Chip]] = dict()
 		self._families_up_to_date : bool = False
+		self._hash = None
+		self._description = None
 		self.add(chips)
 		if ChipSet.reference_chipset is None and not ChipSet.ref_lock :
 			ChipSet.ref_lock = True
@@ -170,15 +69,23 @@ class ChipSet :
 	__ge__ = __contains__
 
 	def __hash__(self):
-		return hash(tuple(sorted([x.name for x in self.chips])))
+		if self._hash is None :
+			self._hash = hash(tuple(sorted([x.name for x in self.chips])))
+		return self._hash
+
+	def invalidate(self):
+		self._hash = None
+		self._description = None
+		self._families_up_to_date = False
 
 	def __str__(self):
-		return "\t".join(sorted([str(x) for x in self.chips]))
+		if self._description is None : 
+			self._description = "\t".join(sorted([str(x) for x in self.chips]))
+		return self._description
 
-	
 	def __and__(self, other):
 		if isinstance(other,ChipSet) :
-			return ChipSet(self.chips & other.chips)# intersection of the two chipsets
+			return ChipSet(self.chips & other.chips) # intersection of the two chipsets
 
 	def __iadd__(self, other: T.Union[T.List[Chip], 'ChipSet', Chip]):
 		self.add(other)
@@ -226,8 +133,8 @@ class ChipSet :
 			self.chips.add(other)
 		else:
 			raise TypeError(f"{type(other)} provided")
-
-		self._families_up_to_date = False
+		
+		self.invalidate()
 
 	def remove(self, other: T.Union[T.List[Chip], T.Set[Chip], 'ChipSet', Chip]):
 		if isinstance(other, ChipSet) :
@@ -240,13 +147,13 @@ class ChipSet :
 			self.chips.remove(other)
 		else:
 			raise TypeError(f"{type(other)} provided")
-
-		self._families_up_to_date = False
+		
+		self.invalidate()
 
 	def update_families(self):
 		self._families.clear()
 		for chip in self.chips :
-			family = ChipSet.get_family(str(chip)).upper()
+			family = Chip.get_family(str(chip)).upper()
 			if family not in self._families :
 				self._families[family] = set()
 			self._families[family].add(chip)
@@ -279,7 +186,7 @@ class ChipSet :
 			line_size += 1
 			
 		for chip in sorted(self.chips, key=lambda x: x.name) :
-			family = ChipSet.get_family(chip.name)
+			family = Chip.get_family(chip.name)
 			if family not in matched_family or matched_family[family] :
 				if line_size == chips_per_line :
 					output += f"\\\n{newline_prefix}"
@@ -300,14 +207,14 @@ class ChipSet :
 		if reference is None :
 			reference = ChipSet.reference_chipset
 		self.chips = (reference - self).chips
-		self._families_up_to_date = False
+		self.invalidate()
 
 	def reversed(self,reference : T.Optional["ChipSet"]= None) -> "ChipSet":
 		if reference is None :
 			reference = ChipSet.reference_chipset
 		return reference - self
 
-	def fill_from_name_list(self,name_list : T.List[str], ref : "Chipset" = None):
+	def fill_from_name_list(self,name_list : T.List[str], ref : "ChipSet" = None):
 		if ref is None :
 			ref = ChipSet.reference_chipset
 		for c in ref.chips :

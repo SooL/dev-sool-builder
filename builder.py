@@ -161,7 +161,7 @@ class SooLBuilder:
 			for chip_definition in pdsc.chips :
 				logger.debug(f"Handling PDSC {i:2d}/{len(self.pdsc_handlers)} - Assoc {j:3d}/{len(pdsc.chips)}.")
 				j += 1
-				if not chip_definition.is_full :
+				if not chip_definition.is_complete :
 					logger.error("\tSkip not full association.")
 					continue
 

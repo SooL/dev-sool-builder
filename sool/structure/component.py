@@ -33,16 +33,17 @@ class FixConvergenceError(Exception):
 	pass
 
 class Component:
-################################################################################
-#                                   BUILDERS                                   #
-################################################################################
 
 	def __init__(self,
-	             chips: T.Union[None, ChipSet] = None,
-	             name: T.Union[None, str] = None,
-	             brief: T.Union[None, str] = None,
-				 parent: "Component" = None
+	             chips: T.Optional[ChipSet] = None,
+	             name: T.Optional[str] = None,
+	             brief: T.Optional[str] = None,
 	             ):
+		self._parent = None 
+		self._name = None
+		self._edited = True
+		
+		# Use custom name setter for correct processing.
 		self.name = name
 		if brief is not None and brief != name :
 			self.brief = ' '.join(brief.split())
@@ -50,20 +51,23 @@ class Component:
 			self.brief = None
 		
 		self.chips = ChipSet(chips)
-		self.parent = parent
 		self.children: T.List["Component"] = None
 
 	def __eq__(self, other):
 		return self.name == other.name
-	
+
 	def __iter__(self) -> T.Iterable["Component"]:
 		if self.children is None :
 			return self # no iteration
 		else :
 			return iter(self.children)
-		
+
 	def __next__(self) :
 		raise StopIteration
+
+################################################################################
+#                                  ACCESSORS                                   #
+################################################################################
 
 	@property
 	def name(self):
@@ -76,12 +80,28 @@ class Component:
 				if not new.isidentifier() and not new.isalnum():
 					logger.error(f"Setting non-alphanum component name {new}")
 			self._name = new
-			self.edited = True
+			self.invalidate()
 	
+
+	@property
+	def size(self) -> int :
+		"""
+		:return: Size of the component, in bits
+		"""
+		return 0
+
+	@property
+	def byte_size(self) -> int :
+		return ceil(self.size/8)
+
+################################################################################
+#                                EDIT TRACKING                                 #
+################################################################################
+
 	@property
 	def edited(self):
 		return self._edited
-	
+
 	def invalidate(self):
 		"""
 		Set self as edited, and all parents as edited de facto.
@@ -109,64 +129,35 @@ class Component:
 			for child in self :
 				child.validate()
 
-#vvvvv TODO vvvvv
-#	def validate_edit(self):
-#		if self.edited :
-#			self.edited = False
-#		if hasattr(self,'__iter__') :
-#			# noinspection PyTypeChecker
-#			for child in self :
-#				child.validate_edit()
-#
-#	def attach_hierarchy(self):
-#		if hasattr(self,'__iter__') :
-#			# noinspection PyTypeChecker
-#			for child in self :
-#				child.set_parent(self)
-#				child.attach_hierarchy()
-#
-#	def finalize(self):
-#		if hasattr(self,'__iter__') :
-#			# noinspection PyTypeChecker
-#			for child in self :
-#				child.set_parent(self)
-#				child.finalize()
-#				self.chips.add(child.chips)
-#		self.chips.update_families()
-# ^^^^^^^^^^
+################################################################################
+#                                  HIERARCHY                                   #
+################################################################################
 
 	@property
-	def computed_chips(self):
-		out = ChipSet(self.chips)
-		for child in self :
-			out.add(child.computed_chips)
-		return out
-
-	@property
-	def size(self) -> int :
-		"""
-		:return: Size of the component, in bits
-		"""
-		return 0
-
-	@property
-	def byte_size(self) -> int :
-		return ceil(self.size/8)
-
-	def exists_for(self, chip_pattern: str) -> bool :
-		return self.chips.match(chip_pattern)
-
-	def set_parent(self, parent: "Component"):
-		if self.parent is not parent :
+	def parent(self):
+		return self._parent
+	
+	@parent.setter
+	def parent(self, parent: T.Optional["Component"]):
+		self.set_parent(parent)
+	
+	def set_parent(self, parent: T.Optional["Component"]):
+		if parent is not self._parent :
+			if self._parent is not None :
+				self._parent.children.remove(self)
+				self._parent.invalidate()
+			self._parent = parent
+			# Use invalidate after setting parent to force invalidate the new parent.
 			self.invalidate()
-			self.parent = parent
-			self.parent.add_child(self)
+			if parent is not None :
+				self.parent.add_child(self)
 	
 	def add_child(self, child: "Component"):
-		self.invalidate()
-		self.children.append(child)
-		child.set_parent(self)
-		self.add_chips(child.chips)
+		if child not in self :
+			self.invalidate()
+			self.children.append(child)
+			self.add_chips(child.chips)
+			child.set_parent(self)
 	
 	def add_chips(self, chips: T.Optional[ChipSet]):
 		if chips not in self.chips:
@@ -190,16 +181,18 @@ class Component:
 					break
 			else :
 				self.add_child(other_child)
-				
 
 ################################################################################
 #                            STRING REPRESENTATIONS                            #
 ################################################################################
 
 	def __str__(self) -> T.Union[None, str]:
-		return self.name if self.name is not None else f"{self.parent!s}.???"
+		return self.name if self.name is not None else f"{self.parent!s}.<???>"
 
 	def __repr__(self):
+		"""
+		:return: "<Component type 
+		"""
 		return f"<{type(self).__name__} {self!s}>"
 
 	@property
@@ -207,7 +200,7 @@ class Component:
 		"""
 		Returns the hierarchy up to this point.
 		Used as the defined pre-processor constant when needed.
-		:return: the full name of the Component. Usually "<parent_alias>_<name>"
+		:return: the full name of the Component. Usually "<parent alias>_<name>"
 		"""
 		if self.parent is None : return self.name
 		else :
@@ -217,7 +210,7 @@ class Component:
 			else                    : return f"{parent_alias}_{self.name}"
 
 ################################################################################
-#                          DEFINE, UNDEFINE & DECLARE                          #
+#                                CPP GENERATION                                #
 ################################################################################
 
 	@property
@@ -258,9 +251,18 @@ class Component:
 
 	@property
 	def defined_name(self) -> str :
+		"""
+		Name of the preprocessor constant to use for '#define' statements
+		"""
 		return self.alias
 
 	def define(self, defines: T.Dict[ChipSet, DefinesHandler]) :
+		"""
+		Insert the definition of the component in the list of all definitions
+		of the output file. All definitions that share the same condition
+		(i.e., same chip set) are grouped to be defined in one block.
+		This method is recursively applied to all children of this component.
+		"""
 		if self.needs_define :
 			if self.chips not in defines :
 				defines[self.chips] = DefinesHandler()
@@ -277,7 +279,7 @@ class Component:
 		return None
 
 ################################################################################
-#                                     FIX                                      #
+#                                    FIXES                                     #
 ################################################################################
 
 	def apply_fixes(self, parent_corrector: Corrector) :
@@ -290,9 +292,8 @@ class Component:
 		"""
 		for _ in range(0, 100) :
 			self.validate()
-			correctors = parent_corrector[self]
-			if (correctors is not None and len(correctors) > 0) :
-				for corrector in correctors :
+			if self in parent_corrector :
+				for corrector in parent_corrector[self] :
 					corrector(self)
 					for child in self :
 						child.apply_fixes(corrector)
@@ -301,48 +302,3 @@ class Component:
 		else :
 			raise FixConvergenceError(f"Component {self} not valid "
 									   "after 100 fix iterations")
-
-
-
-#vvvvv TODO vvvvv
-#	def before_svd_compile(self, parent_corrector) :
-#		"""
-#		Applies corrections, prepare templates
-#		"""
-#
-#		correctors = None if (parent_corrector is None) else parent_corrector[self]
-#
-#		if (correctors is not None) and (len(correctors) > 0) :
-#			for corrector in correctors :
-#				for child in self :
-#					child.before_svd_compile(corrector)
-#				corrector(self)
-#		else :
-#			for child in self :
-#				child.before_svd_compile(None)
-#
-#
-#	def svd_compile(self) :
-#		"""
-#		Merges identical child components
-#		"""
-#		for child in self :
-#			child.svd_compile()
-#
-#	def after_svd_compile(self, parent_corrector) :
-#		"""
-#		Cleans the component and its children, checks for potential errors, applies advanced corrections
-#		:return:
-#		"""
-#
-#		correctors = None if (parent_corrector is None) else parent_corrector[self]
-#
-#		if (correctors is not None) and (len(correctors) > 0) :
-#			for corrector in correctors :
-#				for child in self :
-#					child.after_svd_compile(corrector)
-#				corrector(self)
-#		else :
-#			for child in self :
-#				child.after_svd_compile(None)
-#^^^^^^^^^^
