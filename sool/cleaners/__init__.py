@@ -17,6 +17,7 @@
 #   along with SooL core Library. If not, see  <https://www.gnu.org/licenses/>.*
 # ******************************************************************************
 
+from .corrector import *
 from .field_cleaners import *
 from .register_cleaners import *
 from .peripheral_cleaners import *

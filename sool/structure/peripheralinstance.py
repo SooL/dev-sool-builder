@@ -182,14 +182,3 @@ class PeripheralInstance(Component) :
 
 		return out
 
-	def generate_sql(self,cursor : sql.Cursor,parent_id : int):
-		cursor.execute("INSERT INTO instances (name,address,periph_id) VALUES (:n,:a,:p)",
-					   {"n":self.name,"p":parent_id,"a":self.address})
-		this_id  = cursor.lastrowid
-		chip_names = ','.join([f"'{x.name}'" for x in self.chips])
-		cursor.execute(f"SELECT id FROM chips WHERE name IN ({chip_names}) ")
-		result = cursor.fetchall()
-		if result :
-			data = [{"i":this_id,"c":c[0]} for c in result]
-			cursor.executemany("INSERT INTO inst_chip (inst_id,chip_id) VALUES (:i,:c)",data)
-		return this_id

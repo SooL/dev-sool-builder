@@ -32,11 +32,11 @@ import logging
 
 logger = logging.getLogger()
 
-REG_VAR_DECLARATION : str = """{indent}struct
+REG_VAR_DECLARATION : str = """\
+{indent}struct
 {indent}{{
 {fields}{indent}}};
 """
-
 
 class RegisterVariant(Component) :
 	def __init__(self, chips: T.Optional[ChipSet] = None,
@@ -51,6 +51,7 @@ class RegisterVariant(Component) :
 ################################################################################
 #                                  OPERATORS                                   #
 ################################################################################
+
 	def __iter__(self):
 		return iter(self.fields)
 

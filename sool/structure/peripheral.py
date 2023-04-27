@@ -23,11 +23,10 @@ import xml.etree.ElementTree as ET
 import logging
 #from structure import Group
 from sool.cmsis_analysis.header import CMSISPeripheral, CMSISHeader
-from . import Register, MappingElement, PeripheralInstance, PeripheralMapping, PeripheralTemplate, \
-	RegisterVariant
-from .utils import get_node_text, TabManager
+from . import Component, Register
+from . import MappingElement, PeripheralInstance, PeripheralMapping, PeripheralTemplate
 from . import ChipSet
-from . import Component
+from .utils import get_node_text, TabManager
 
 from .utils import DefinesHandler
 
@@ -38,44 +37,38 @@ logger = logging.getLogger()
 
 class Peripheral(Component) :
 
-	@staticmethod
-	def create_from_xml(chips: ChipSet, xml_data: ET.Element) -> "Peripheral" :
+	@classmethod
+	def create_from_xml(cls, chips: ChipSet, xml_data: ET.Element) -> "Peripheral" :
 
 		brief: str = get_node_text(xml_data, "description")\
 			.lower()\
-			.replace("-", " ")\
-			.replace("\n", " ")
+			.replace("-", " ")
 		brief = " ".join(brief.split())
 
-		periph =  Peripheral(chips=chips, name=None, brief=brief)
+		ret =  cls(chips=chips, name=None, brief=brief)
 
 		for xml_reg in xml_data.findall("registers/register") :
 			new_register = Register.create_from_xml(chips, xml_reg)
-			periph.add_register(new_register)
+			ret.add_register(new_register)
 
 			reg_placement = MappingElement.create_from_xml(chips=chips, register=new_register, xml_data= xml_reg)
-			periph.add_placement(reg_placement)
+			ret.add_placement(reg_placement)
 
-		return periph
+		return ret
 
 	def __init__(self, chips: T.Union[ChipSet, None] = None,
 	             name: T.Union[str, None] = None,
 	             brief: T.Union[str, None] = None) :
 		super().__init__(chips=chips, name=name, brief=brief)
 
-		self.registers: T.List[T.Union[Peripheral, Register]] = list()
 		self.mappings: T.List[PeripheralMapping] = list()
 		self.instances: T.List[PeripheralInstance] = list()
-		self.templates: T.List[PeripheralTemplate] = list()
 		self.max_size = 0
 		self.inheritFrom : Peripheral = None
 
 ################################################################################
 #                                  OPERATORS                                   #
 ################################################################################
-
-	def __iter__(self):
-		return iter(self.registers)
 
 	def __lt__(self, other):
 		if self.inheritFrom is None and other.inheritFrom is not None :
@@ -87,8 +80,7 @@ class Peripheral(Component) :
 
 	def __eq__(self, other):
 		if isinstance(other, Peripheral) :
-			return (self.name == other.name and
-					self.brief == other.brief and
+			return (super().__eq__(other) and
 					self.mapping_equivalent_to(other))
 
 		elif isinstance(other, str) :
@@ -97,29 +89,20 @@ class Peripheral(Component) :
 			raise TypeError()
 
 	def __contains__(self, item) -> bool:
-		if isinstance(item,PeripheralMapping) :
+		if isinstance(item, PeripheralMapping) :
 			return item in self.mappings
-		elif isinstance(item, Register) or isinstance(item, Peripheral):
-			return item in self.registers
-		elif isinstance(item, str) :
-			for r in self.registers :
-				if r.name == item :
-					return True
-			return False
-		raise ValueError()
+		elif isinstance(item, PeripheralInstance) :
+			return item in self.instances
+		else :
+			return super().__contains__(item)
 
 	def __getitem__(self, item) -> T.Union["Peripheral", Register]:
-		if isinstance(item,Register) or isinstance(item, Peripheral):
-			for reg in self :
-				if reg == item :
-					return reg
-			raise KeyError()
-		if isinstance(item,str):
-			for reg in self :
-				if reg.name == item:
-					return reg
-			raise KeyError()
-		raise TypeError()
+		if isinstance(item, PeripheralMapping) :
+			return self.mappings[item]
+		elif isinstance(item, PeripheralInstance) :
+			return self.instances[item]
+		else :
+			return super().__getitem__(item)
 
 
 	@property
@@ -136,26 +119,18 @@ class Peripheral(Component) :
 		return max_size
 
 	@property
-	def has_template(self):
-		for reg in self :
-			if reg.has_template :
-				return True
-		return False
-
-	@property
 	def inherits(self):
 		return self.inheritFrom is not None
+	
+	@property
+	def registers(self) -> T.List[Register]:
+		return self.children
 
 ################################################################################
 #                             REGISTERS MANAGEMENT                             #
 ################################################################################
-	def add_register(self, reg: T.Union["Peripheral", Register]):
-		if reg.name is not None and reg.name in self :
-			self[reg.name].inter_svd_merge(reg)
-		else :
-			self.registers.append(reg)
-			reg.set_parent(self)
-			self.edited = True
+	add_register = super().add_child
+	
 	def remove_register(self, reg: T.Union["Peripheral", Register]):
 		if reg.name is not None and reg.name in self :
 			reg = self[reg.name]
@@ -174,8 +149,14 @@ class Peripheral(Component) :
 #                             INSTANCES MANAGEMENT                             #
 ################################################################################
 
-	def add_instance(self, other: "PeripheralInstance") :
-		if isinstance(other, PeripheralInstance) :
+	def add_instance(self, other: T.Union[T.List["PeripheralInstance"], "Peripheral","PeripheralInstance"]) :
+		if isinstance(other, Peripheral) :
+			for inst in other.instances :
+				self.add_instance(inst)
+		elif isinstance(other,list) :
+			for inst in other :
+				self.add_instance(inst)
+		elif isinstance(other, PeripheralInstance) :
 			self.chips.add(other.chips)
 
 			for i in self.instances :
@@ -186,80 +167,54 @@ class Peripheral(Component) :
 			self.instances.append(other)
 			self.edited = True
 		else:
-			raise TypeError(f"Expected a peripheral instance. Got {type(other)}.")
-
-	def add_instances(self, other :  T.Union[T.List["PeripheralInstance"], "Peripheral"]):
-		if isinstance(other, Peripheral) :
-			for inst in other.instances :
-				self.add_instance(inst)
-		elif isinstance(other,list) :
-			for inst in other :
-				self.add_instance(inst)
-		else :
-			raise TypeError(f"Expected a peripheral instances list or peripheral. Got {type(other)}.")
-
-	def get_linked_variants(self, instance) -> T.List[RegisterVariant]:
-		linked_variances: T.List[RegisterVariant] = list()
-		for child in self :
-			linked_variances.extend(child.get_linked_variants(instance))
-		return linked_variances
-
-	def needs_template(self, instance) -> bool :
-		for child in self :
-			if child.needs_template(instance) :
-				return True
-		return False
-
-	def get_template(self, instance) -> T.List[PeripheralTemplate] :
-		templates : T.List[PeripheralTemplate] = list()
-		for tmpl in self.templates :
-			if instance in tmpl.instances :
-				templates.append(tmpl)
-		return templates
-
+			raise TypeError(f"Expected a peripheral, an instance or a list of those. Got {type(other)}.")
 
 ################################################################################
 #                              MAPPING MANAGEMENT                              #
 ################################################################################
 
-	def mapping_equivalent_to(self,other : "Peripheral", ignore_templates: bool=True) -> bool :
+	def mapping_equivalent_to(self,other : "Peripheral") -> bool :
 		"""
 		This function will check if the current peripheral has a mapping equivalent to the other one.
-		:param ignore_templates: True if template registers should be ignored
-		 (two peripherals can be identical, even if they have different template registers)
 		:param other: The other peripheral
 		:return:
 		"""
 		self_placements = list()
 		other_placements = list()
-		diff = list()
+		
 		for m in self.mappings :
 			self_placements.extend(m.elements)
 		for m in other.mappings :
 			other_placements.extend(m.elements)
 
-		for elmt in self_placements :
-			if elmt not in other_placements :
-				diff.append(elmt)
+		if len(self_placements) != len(other_placements) :
+			return False
+		
+		for elt in self_placements :
+			if elt not in other_placements :
+				return False
 		for elmt in other_placements :
 			if elmt not in self_placements :
-				diff.append(elmt)
+				return False
+			
+		return True
+		
+		# diff = list()
+		# if ignore_templates :
+		# 	for elmt in diff :
+		# 		# if the register is only present in one of the two peripherals, merging is allowed only if the register in templated
+		# 		if not elmt.component.has_template :
+		# 			return False
 
-		if ignore_templates :
-			for elmt in diff :
-				# if the register is only present in one of the two peripherals, merging is allowed only if the register in templated
-				if not elmt.component.has_template :
-					return False
-
-			for i in range(0, len(diff)-1) :
-				for j in range(i+1, len(diff)) :
-					# if the templated register's address is used by another templated register with the same name,
-					# the two peripherals can be merged together. Otherwise, merging is possible only if the address is not used
-					if diff[i].overlap(diff[j]) and diff[i].name != diff[j].name :
-						return False
-			return True
-		else :
-			return len(diff) == 0
+		# 	for i in range(0, len(diff)-1) :
+		# 		for j in range(i+1, len(diff)) :
+		# 			# if the templated register's address is used by another templated register with the same name,
+		# 			# the two peripherals can be merged together. Otherwise, merging is possible only if the address is not used
+		# 			if diff[i].overlap(diff[j]) and diff[i].name != diff[j].name :
+		# 				return False
+		# 	return True
+		# else :
+		#	return len(diff) == 0
 
 	def add_mapping(self, mapping: PeripheralMapping) :
 		for elmt in mapping :

@@ -32,6 +32,7 @@ logger = logging.getLogger()
 class FixConvergenceError(Exception):
 	pass
 
+
 class Component:
 
 	def __init__(self,
@@ -42,6 +43,8 @@ class Component:
 		self._parent = None 
 		self._name = None
 		self._edited = True
+
+		self._lock = False
 		
 		# Use custom name setter for correct processing.
 		self.name = name
@@ -55,15 +58,6 @@ class Component:
 
 	def __eq__(self, other):
 		return self.name == other.name
-
-	def __iter__(self) -> T.Iterable["Component"]:
-		if self.children is None :
-			return self # no iteration
-		else :
-			return iter(self.children)
-
-	def __next__(self) :
-		raise StopIteration
 
 ################################################################################
 #                                  ACCESSORS                                   #
@@ -106,6 +100,7 @@ class Component:
 		"""
 		Set self as edited, and all parents as edited de facto.
 		"""
+		assert not self._lock, f"Tried to invalidate the component {self!r} while it's locked"
 		if not self._edited :
 			self._edited = True
 			if self.parent is not None :
@@ -133,6 +128,36 @@ class Component:
 #                                  HIERARCHY                                   #
 ################################################################################
 
+	def __iter__(self) -> T.Iterable["Component"]:
+		if self.children is None :
+			return self # no iteration
+		else :
+			return iter(self.children)
+	
+	def __next__(self) :
+		raise StopIteration
+	
+	def __getitem__(self, item : T.Union[str,"Component"]) -> T.Union["Component", None]:
+		if isinstance(item,str) :
+			for child in self :
+				if child.name == item :
+					return child
+		elif isinstance(item, Component):
+			for child in self :
+				if child is item or child == item :
+					return child
+		else :
+			raise TypeError(f"Invalid key type {type(item).__name__}.")
+		raise KeyError(f"Item {item!r} not found in {self!r}.")
+
+	def __contains__(self, item: T.Union[str, "Component"]) -> bool:
+		try :
+			item = self[item]
+			return True
+		except KeyError :
+			pass
+		return False
+
 	@property
 	def parent(self):
 		return self._parent
@@ -155,9 +180,13 @@ class Component:
 	def add_child(self, child: "Component"):
 		if child not in self :
 			self.invalidate()
+			if self.children is None:
+				self.children = list()
 			self.children.append(child)
 			self.add_chips(child.chips)
 			child.set_parent(self)
+		else :
+			self[child].absorb(child)
 	
 	def add_chips(self, chips: T.Optional[ChipSet]):
 		if chips not in self.chips:
@@ -171,8 +200,13 @@ class Component:
 		Keep self brief if not None, otherwise use other brief.
 		Merge ChipSets.
 		"""
+		if other is self :
+			return
+		
 		if self.brief is None and other.brief is not None :
 			self.brief = other.brief
+		
+		self.add_chips(other.chips)
 		
 		for other_child in other :
 			for self_child in self :
@@ -181,6 +215,35 @@ class Component:
 					break
 			else :
 				self.add_child(other_child)
+	
+	def merge_children(self) :
+		"""
+		Merge identical children.
+		Shall be called after using correctors.
+		"""
+
+		if self.edited :
+			pos_ref = 0
+			
+			while pos_ref < len(self.children)-1 :	
+				child_ref = self.children[pos_ref]
+				pos_other = pos_ref + 1
+				
+				while pos_other < len(self.children) :
+					child_other = self.children[pos_other]
+					
+					if child_other is child_ref :
+						# Drop duplicates
+						self.children.pop(pos_other)
+					elif child_other == child_ref :
+						# Merge equivalents
+						child_ref.absorb(child_other)
+						self.children.pop(pos_other)
+					else :
+						# Go to next comparison
+						pos_other += 1
+
+				pos_ref += 1 
 
 ################################################################################
 #                            STRING REPRESENTATIONS                            #
@@ -190,9 +253,6 @@ class Component:
 		return self.name if self.name is not None else f"{self.parent!s}.<???>"
 
 	def __repr__(self):
-		"""
-		:return: "<Component type 
-		"""
 		return f"<{type(self).__name__} {self!s}>"
 
 	@property
@@ -256,6 +316,15 @@ class Component:
 		"""
 		return self.alias
 
+	def finalize(self) :
+		"""
+		Perform last steps before outputing the C++ code. 
+		Component should not be changed afterward.
+		"""
+		self._lock = True
+		for child in self.children :
+			child.finalize()
+
 	def define(self, defines: T.Dict[ChipSet, DefinesHandler]) :
 		"""
 		Insert the definition of the component in the list of all definitions
@@ -296,7 +365,10 @@ class Component:
 				for corrector in parent_corrector[self] :
 					corrector(self)
 					for child in self :
-						child.apply_fixes(corrector)
+						child.apply_fixes(parent_corrector=corrector)
+			
+			self.merge_children()
+			
 			if not self.edited :
 				break
 		else :

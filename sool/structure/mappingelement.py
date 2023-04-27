@@ -24,7 +24,10 @@ import xml.etree.ElementTree as ET
 
 
 class MappingElement(Component) :
-
+	"""
+	Bind an address (register offset) to a register or a sub-peripheral within its peripheral.
+	Also allows to specify an array of register or sub-peripheral.
+	"""
 	@staticmethod
 	def create_from_xml(chips: ChipSet, register: Register,
 	                    xml_data: ET.Element) -> "MappingElement" :
@@ -35,7 +38,9 @@ class MappingElement(Component) :
 
 	# noinspection PyUnresolvedReferences
 	def __init__(self, chips: ChipSet, name: T.Union[str, None],
-	             component: T.Union[Register, "Peripheral"], address: int, array_size: int = 0, array_space: int = 0) :
+	             component: T.Union[Register, "Peripheral"],
+				 address: int,
+				 array_size: int = 0, array_space: int = 0) :
 
 		from . import Peripheral
 		if not(isinstance(component, Register) or isinstance(component, Peripheral)) :
@@ -63,12 +68,13 @@ class MappingElement(Component) :
 		else :
 			return False
 
-	def __cmp__(self, other) -> int:
+	def __cmp__(self, other : "MappingElement") -> int:
 		if isinstance(other, MappingElement) :
 			return self.address - other.address
 		else :
 			raise TypeError()
-	def __lt__(self, other) -> bool:
+		
+	def __lt__(self, other : "MappingElement") -> bool:
 		if isinstance(other, MappingElement) :
 			if self.address != other.address :
 				return self.address < other.address
@@ -77,7 +83,7 @@ class MappingElement(Component) :
 		else :
 			raise TypeError()
 
-	def __gt__(self, other) -> bool:
+	def __gt__(self, other : "MappingElement") -> bool:
 		if isinstance(other, MappingElement) :
 			if self.address != other.address :
 				return self.address > other.address

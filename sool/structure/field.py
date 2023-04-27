@@ -54,6 +54,7 @@ class Field(Component) :
 ################################################################################
 #                                  OPERATORS                                   #
 ################################################################################
+	
 	def __str__(self) :
 		return super().__str__() + f" @{self.position}-{self.position + self.size - 1}"
 
@@ -87,12 +88,23 @@ class Field(Component) :
 		return Field(chips=self.chips, name=self.name, brief=self.brief, position=self.position, size=self.size)
 
 	@property
+	def children(self) :
+		return None
+	
+	@children.setter
+	def children(self, val) :
+		if val is not None :
+			raise NotImplementedError(f"Fields cannot have children")
+	
+
+	@property
 	def size(self) -> int :
 		return self._size
 
 	@size.setter
 	def size(self, new_size: int) :
 		self._size = new_size
+		self.invalidate()
 
 ################################################################################
 #                                DEFINE AND USE                                #
